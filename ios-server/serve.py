@@ -78,7 +78,7 @@ def configure_engine() -> None:
                        ('EXVIUS_IOS_BANNER_FIT_NAMES', '1'),
                        # A stock client keeps tables of its own; make it take this server's whole set.
                        ('EXVIUS_TABLE_VERSION_OFFSET', '200000'),  # raise it to make the phone re-download every table
-                       # Keep multi-megabyte client error-log uploads off by default; set to 1 to enable.
+                       # Keep multi-megabyte client error-log uploads off by default; set to 1 for troubleshooting.
                        ('EXVIUS_CLIENT_REPORTS', '0'),
                        # Serve rebuilt tables with LF line endings; the iPhone client rejects CRLF.
                        ('EXVIUS_TABLE_LF', '1'),
@@ -103,6 +103,10 @@ def start_engine():
         sys.exit(3)
     capture_server.State.cdn_root = str(DATA / 'native')
     capture_server.State.cdn_overlay = str(DATA / 'native')
+    # Unit pictures for the Drop Rates and News pages, copied out of the unit packs in the background
+    # (source/server/unit_art.py; EXVIUS_NOTICE_ART=0 turns it off).
+    import unit_art
+    unit_art.start(capture_server.State.cdn_overlay, capture_server.State.cdn_root)
     # Index the native image folders the way the Android app does.
     from ffbe_gacha import BANNER_ART_ROOTS, _BANNER_ART_INDEX
     for relative in ('homeMarquee', 'en/sd/static_banner', 'common_lang/sd/static_banner'):
