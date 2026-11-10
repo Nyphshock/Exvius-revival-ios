@@ -3,8 +3,8 @@
 Each deal banner names its list and detail images (`art.banner`, `art.detail_banner`, both `deal-<id>-*.png`)
 and where Global published them (`art.urls`: the official news CDN, read through the Wayback Machine, or the
 wiki). This module downloads each missing file into `DEAL_ART_ROOT` (`<data>/deal_art`), where the banner art
-index finds it. A file that can't be fetched is retried on the next request or start; missing deal art is
-fetched on demand so the client does not race the background download queue.
+index finds it. Missing art is fetched on demand so the client does not race the background queue. If the
+upstream is unreachable, a titled placeholder is served and the real art is retried on the next start.
 
 Remove: delete `<data>/deal_art` (README, removal section). Off with EXVIUS_DEAL_ART_FETCH=0.
 """
@@ -92,11 +92,13 @@ def _png(data: bytes) -> bytes:
     return out.getvalue()
 
 
-def _save_target(folder: str, target: tuple, log=print) -> bool | None:
+def _save_target(folder: str, target: tuple, log=print) -> tuple[bool, bool]:
     name, url, title, size = target
     path = os.path.join(folder, name)
-    if os.path.isfile(path):
-        return False
+    retry_path = path + '.retry'
+    has_file = os.path.isfile(path)
+    if has_file and not os.path.isfile(retry_path):
+        return False, True
     try:
         if not url:
             data = render(title, size)
@@ -107,15 +109,30 @@ def _save_target(folder: str, target: tuple, log=print) -> bool | None:
     except urllib.error.HTTPError as exc:
         if exc.code != 404:
             log(f'DEAL-ART {name}: {exc}')
-            return None
-        data = render(title, size)
+            if has_file:
+                return False, False
+            data = render(title, size)
+            reachable = False
+        else:
+            data = render(title, size)
+            reachable = True
     except Exception as exc:  # noqa: BLE001 -- retried on the next request or start
         log(f'DEAL-ART {name}: {exc}')
-        return None
+        if has_file:
+            return False, False
+        data = render(title, size)
+        reachable = False
+    else:
+        reachable = True
+    if not reachable:
+        with open(retry_path, 'w', encoding='utf-8') as fh:
+            fh.write('retry on next start\n')
     with open(path + '.tmp', 'wb') as fh:
         fh.write(data)
     os.replace(path + '.tmp', path)
-    return True
+    if reachable and os.path.isfile(retry_path):
+        os.remove(retry_path)
+    return True, reachable
 
 
 def fetch_one(name: str, log=print) -> str | None:
@@ -130,8 +147,8 @@ def fetch_one(name: str, log=print) -> str | None:
     os.makedirs(folder, exist_ok=True)
     path = os.path.join(folder, name)
     with _file_lock(name):
-        added = _save_target(folder, target, log)
-    if added:
+        changed, _reachable = _save_target(folder, target, log)
+    if changed:
         import ffbe_gacha
         ffbe_gacha._BANNER_ART_INDEX.clear()
     return path if os.path.isfile(path) else None
@@ -144,20 +161,25 @@ def fetch(log=print) -> int:
     import data_paths
     folder = data_paths.DEAL_ART_ROOT
     os.makedirs(folder, exist_ok=True)
-    added = failed = 0
+    added = placeholders = failed = 0
+    changed = False
     for name, url, title, size in _targets():
         with _file_lock(name):
-            was_added = _save_target(folder, (name, url, title, size), log)
-        if was_added is None:
+            was_added, reachable = _save_target(folder, (name, url, title, size), log)
+        changed = changed or was_added
+        if not reachable:
             failed += 1
+            if was_added:
+                placeholders += 1
             continue
         if not was_added:
             continue
         added += 1
         time.sleep(0.5)   # be gentle with the Wayback Machine
-    if added:
+    if changed:
         import ffbe_gacha
         ffbe_gacha._BANNER_ART_INDEX.clear()   # rebuilt on the next lookup, now with these files
     if added or failed:
-        log(f'DEAL-ART: {added} image(s) added, {failed} not reachable (retried next start)')
+        log(f'DEAL-ART: {added} image(s) added, {placeholders} offline placeholder(s), '
+            f'{failed} source(s) unreachable (retry next start)')
     return added

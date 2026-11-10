@@ -707,6 +707,8 @@ class Handler(BaseHTTPRequestHandler):
             if hit is None and "banner" in rel.lower() and os.path.basename(rel).startswith("deal-"):
                 import deal_art
                 hit = deal_art.fetch_one(os.path.basename(rel), log=lambda message: print(message, flush=True))
+                if hit and os.path.isfile(hit + ".retry"):
+                    how_art = "deal-art offline placeholder"
             if hit is None:
                 hit = area_art_index().get(os.path.basename(rel))
                 how_art = "area-art basename"
