@@ -401,7 +401,7 @@ class Handler(BaseHTTPRequestHandler):
         # printed: was a body served, and which key (if any) selected it.
         replied = "reply:sent" if body_plain else "reply:EMPTY"
         replied += f" via {spec_key}" if spec_key else " via transform (no responses.json entry)"
-          print(f"{flag}{self.command} {self.path}  class={cls} ({how})  key={enc_key}  "
+        print(f"{flag}{self.command} {self.path}  class={cls} ({how})  key={enc_key}  "
               f"reqID={header.get('z5hB3P01')}  mission={mid or '-'}  from={spec_key or '-'}  "
               f"body={len(raw)}B  {replied}  {took}  wait={lock_wait_ms:.0f}ms  -> {os.path.relpath(fname, WORK)}",
               flush=True)
