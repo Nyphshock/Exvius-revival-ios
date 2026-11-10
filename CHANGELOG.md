@@ -2,6 +2,13 @@
 
 Each entry is one update to this repo. To update: in your repo folder run `git pull`, then from `ios-server` run `docker compose build && docker compose up -d`. Your save isn't touched. Open the game twice afterwards so it picks up the new data.
 
+## 2026-11-10 (fourth update)
+
+- Summon list banners now fit the phone's frame without cropping tall artwork. Missing deal banners are fetched when requested, even if the background download queue has not reached them yet.
+- The summon archive can be selected with the profile message: `0` for this week's rotation, `1` for Standard, `2`-`5` for Seasons 1-4, and `6` for Collaborations.
+- Client error-log collection is off by default. Pending uploads are acknowledged and discarded unless `EXVIUS_CLIENT_REPORTS=1` is enabled; report contents are excluded from request captures.
+- Game action requests are serialized while state is updated, and logs now include time spent waiting for that lock.
+
 ## 2026-11-10 (third update)
 
 - Collection points in explorations now show up (the sparkling spots; Dalnakya Cavern has three) and give what they gave in Global: ore, Lumber, crysts or magicite, or the event's own items in event explorations.

@@ -1,4 +1,4 @@
-"""Ask the game to upload its own error log, and keep what it sends.
+"""Optionally ask the game to upload its own error log.
 
 The client keeps a report log (`Reports`, the "REPORTSMODULE"): among other things, a failed table load
 writes `Error loading MST INFO=<details>` to it (LoginScene::procStateMstLoadWait and
@@ -14,8 +14,9 @@ and waits for a "report state" group in the answer. Read from the Android 9.0 li
   report state  group cd87bd8b (sgReportStateResponse), 950510b8 = 0 for success
 
 This matters for a stock client such as the iPhone app, whose own system log is redacted: its reports
-are the only place the client says what went wrong. Turned on with EXVIUS_CLIENT_REPORTS=1; each upload
-is saved under <server data>/client-reports/.
+are the only place the client says what went wrong. Collection is off by default; turn it on with
+EXVIUS_CLIENT_REPORTS=1 to save uploads under <server data>/client-reports/. Pending uploads are
+acknowledged and discarded while collection is off.
 """
 from __future__ import annotations
 

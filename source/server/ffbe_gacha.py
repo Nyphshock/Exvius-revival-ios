@@ -541,8 +541,9 @@ def _gacha_schedule_banner_string(banner: str, detail: str = "", extras=(), pad:
     frame is 640x392 like the art.
     """
     name = banner or GACHA_DEFAULT_BANNER_ART
-    from banner_fit import fit_name   # a fresh name for padded detail art (banner_fit.py)
+    from banner_fit import fit_list_name, fit_name
     detail = fit_name(detail or name, pad)
+    name = fit_list_name(name)
     extra = "".join(f",{i}:{fit_name(f, pad)}" for i, f in enumerate(extras or (), 1))
     return f"{name},0:{detail}{extra}"
 def _gacha_target_info(entry: dict) -> str:

@@ -426,17 +426,18 @@ class Handler(BaseHTTPRequestHandler):
     # `def do_GET` is silently overwritten by a later `do_GET = _handle` — which is exactly what happened when
     # the CDN handler was first added above (it was dead code, and a CDN fetch was logged as an action call).
     def do_POST(self):
-        with STATE_LOCK:
-            if self.path == '/__exvius/new-game':
+        if self.path == '/__exvius/new-game':
+            with STATE_LOCK:
                 return self._offline_menu(reset=True)
-            if '/actionSymbol/' in self.path:
-                length = int(self.headers.get("Content-Length") or 0)
-                raw = self.rfile.read(length) if length else b""
-                waiting = time.monotonic()
-                with STATE_LOCK:
-                    lock_wait_ms = (time.monotonic() - waiting) * 1000
-                    self._handle(raw, lock_wait_ms)
-            else:
+        if '/actionSymbol/' in self.path:
+            length = int(self.headers.get("Content-Length") or 0)
+            raw = self.rfile.read(length) if length else b""
+            waiting = time.monotonic()
+            with STATE_LOCK:
+                lock_wait_ms = (time.monotonic() - waiting) * 1000
+                self._handle(raw, lock_wait_ms)
+        else:
+            with STATE_LOCK:
                 # Original web pages post device parameters when opening.
                 # Their content is a local resource, not an encrypted game action.
                 self._cdn_fetch()
@@ -605,6 +606,7 @@ class Handler(BaseHTTPRequestHandler):
         # Under its `-full1` name (friend summons' screen has a 640x392 frame): fitted to that frame instead.
         import banner_fit
         fit_plain = banner_fit.is_plain(rel)
+        fit_list = "/static_banner/gacha/main/" in "/" + rel
         rel = banner_fit.real_rel(rel)
         # EXVIUS_TABLE_VERSION_OFFSET advertises every table at <real version + offset> (see
         # ffbe_battle.serve_version_table); the client then asks for that inflated name. Map it back.
@@ -702,6 +704,9 @@ class Handler(BaseHTTPRequestHandler):
                 and ("banner" in rel.lower() or "area" in rel.lower()):
             hit = banner_art_index().get(os.path.basename(rel)) if "banner" in rel.lower() else None
             how_art = "banner-art basename"
+            if hit is None and "banner" in rel.lower() and os.path.basename(rel).startswith("deal-"):
+                import deal_art
+                hit = deal_art.fetch_one(os.path.basename(rel), log=lambda message: print(message, flush=True))
             if hit is None:
                 hit = area_art_index().get(os.path.basename(rel))
                 how_art = "area-art basename"
@@ -719,7 +724,11 @@ class Handler(BaseHTTPRequestHandler):
         if data is not None and rel:
             import banner_fit
             if banner_fit.wants(rel):
-                data, fit_note = banner_fit.fit(data, banner_fit.BASE_FRAME if fit_plain else banner_fit.FRAME)
+                data, fit_note = banner_fit.fit(
+                    data,
+                    banner_fit.LIST_FRAME if fit_list else banner_fit.BASE_FRAME if fit_plain else banner_fit.FRAME,
+                    contain=fit_list,
+                )
                 if fit_note:
                     how = f"{how}, {fit_note}"
         n = len(data) if data is not None else 0

@@ -3,8 +3,8 @@
 Each deal banner names its list and detail images (`art.banner`, `art.detail_banner`, both `deal-<id>-*.png`)
 and where Global published them (`art.urls`: the official news CDN, read through the Wayback Machine, or the
 wiki). This module downloads each missing file into `DEAL_ART_ROOT` (`<data>/deal_art`), where the banner art
-index finds it. A file that can't be fetched is retried on the next start; until then the summon list shows
-the banner without art, as for any banner whose file is missing.
+index finds it. A file that can't be fetched is retried on the next request or start; missing deal art is
+fetched on demand so the client does not race the background download queue.
 
 Remove: delete `<data>/deal_art` (README, removal section). Off with EXVIUS_DEAL_ART_FETCH=0.
 """
@@ -12,11 +12,19 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 import time
 import urllib.error
 import urllib.request
 
 PNG = b'\x89PNG\r\n\x1a\n'
+_LOCKS_GUARD = threading.Lock()
+_FILE_LOCKS: dict[str, threading.Lock] = {}
+
+
+def _file_lock(name: str) -> threading.Lock:
+    with _LOCKS_GUARD:
+        return _FILE_LOCKS.setdefault(name, threading.Lock())
 
 
 def _targets() -> list[tuple[str, str, str, tuple]]:
@@ -84,6 +92,51 @@ def _png(data: bytes) -> bytes:
     return out.getvalue()
 
 
+def _save_target(folder: str, target: tuple, log=print) -> bool | None:
+    name, url, title, size = target
+    path = os.path.join(folder, name)
+    if os.path.isfile(path):
+        return False
+    try:
+        if not url:
+            data = render(title, size)
+        else:
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (ExviusOffline deal art)'})
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                data = _png(resp.read())
+    except urllib.error.HTTPError as exc:
+        if exc.code != 404:
+            log(f'DEAL-ART {name}: {exc}')
+            return None
+        data = render(title, size)
+    except Exception as exc:  # noqa: BLE001 -- retried on the next request or start
+        log(f'DEAL-ART {name}: {exc}')
+        return None
+    with open(path + '.tmp', 'wb') as fh:
+        fh.write(data)
+    os.replace(path + '.tmp', path)
+    return True
+
+
+def fetch_one(name: str, log=print) -> str | None:
+    """Fetch one missing deal image immediately, independently of the startup download queue."""
+    if os.environ.get('EXVIUS_DEAL_ART_FETCH', '1') != '1':
+        return None
+    target = next((target for target in _targets() if target[0] == name), None)
+    if target is None:
+        return None
+    import data_paths
+    folder = data_paths.DEAL_ART_ROOT
+    os.makedirs(folder, exist_ok=True)
+    path = os.path.join(folder, name)
+    with _file_lock(name):
+        added = _save_target(folder, target, log)
+    if added:
+        import ffbe_gacha
+        ffbe_gacha._BANNER_ART_INDEX.clear()
+    return path if os.path.isfile(path) else None
+
+
 def fetch(log=print) -> int:
     """Download the deal banners' missing art. Returns how many files were added."""
     if os.environ.get('EXVIUS_DEAL_ART_FETCH', '1') != '1':
@@ -93,33 +146,13 @@ def fetch(log=print) -> int:
     os.makedirs(folder, exist_ok=True)
     added = failed = 0
     for name, url, title, size in _targets():
-        path = os.path.join(folder, name)
-        if os.path.isfile(path):
-            continue
-        try:
-            if not url:
-                data = render(title, size)
-            else:
-                req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (ExviusOffline deal art)'})
-                with urllib.request.urlopen(req, timeout=30) as resp:
-                    data = resp.read()
-                data = _png(data)
-        except urllib.error.HTTPError as exc:
-            if exc.code == 404:   # gone from the archive: a titled stand-in, so the banner isn't blank
-                data = render(title, size)
-            else:
-                failed += 1
-                if failed <= 5:
-                    log(f'DEAL-ART {name}: {exc}')
-                continue
-        except Exception as exc:  # noqa: BLE001 -- retried on the next start
+        with _file_lock(name):
+            was_added = _save_target(folder, (name, url, title, size), log)
+        if was_added is None:
             failed += 1
-            if failed <= 5:
-                log(f'DEAL-ART {name}: {exc}')
             continue
-        with open(path + '.tmp', 'wb') as fh:
-            fh.write(data)
-        os.replace(path + '.tmp', path)
+        if not was_added:
+            continue
         added += 1
         time.sleep(0.5)   # be gentle with the Wayback Machine
     if added:
