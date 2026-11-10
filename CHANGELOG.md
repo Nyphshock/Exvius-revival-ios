@@ -4,7 +4,7 @@ Each entry is one update to this repo. To update: in your repo folder run `git p
 
 ## 2026-11-10 (sixth update)
 
-- Summon list banners preserve native 600x120, 640x160/170, and 640x320 double-height formats; unusual formats are contained without cropping. Missing deal banners are fetched when requested; if external access is refused, a titled local placeholder prevents a 404 and the real art is retried on the next start.
+- Summon list banners preserve native 600x120, 640x160/170, 640x320 double-height, and 640x392 tall formats; unusual formats are contained without cropping. Missing deal banners are fetched when requested; if external access is refused, a titled local placeholder prevents a 404 and the real art is retried on the next start.
 - The summon archive can be selected with the profile message: `0` for this week's rotation, `1` for Standard, `2`-`5` for Seasons 1-4, and `6` for Collaborations.
 - Pending client error logs are acknowledged and discarded when collection is off; report contents are excluded from request captures.
 - Game action requests are serialized while state is updated, and logs include time spent waiting for that lock.

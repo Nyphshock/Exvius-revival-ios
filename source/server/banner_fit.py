@@ -5,17 +5,17 @@ a fixed frame about 3.5 times as wide as it is tall, and stretches whatever imag
 Many of the archived banners are 640x160 or 640x392, so on the iPhone their lettering came out squashed
 (operator screenshots, 2026-11-05). The Android build fits them with a hook (source/exvius/summon_art.js);
 the iPhone has none, so the server pads each such image to the frame's proportions instead, centred on a
-blurred, darkened copy of itself. List art (`gacha/main/`) fits a 640x160 frame, while legitimate double-height
-640x320 banners keep their full size; only taller art is contained within the double-height frame.
+blurred, darkened copy of itself. List art (`gacha/main/`) keeps its native 640x160, 640x320, and 640x392
+formats; only unusual proportions are contained, so tall banners retain the full-height look of the stock list.
 
 Results are cached in ios-cache/banner-fit/. Needs Pillow; without it, or with EXVIUS_IOS_BANNER_FIT=0,
 images are served as they are.
 
 The app keeps every banner image it has downloaded and never asks for that file again, so a phone that saw the
 squashed art keeps showing it. With EXVIUS_IOS_BANNER_FIT_NAMES=1 (the iPhone server's default) the summon
-tables name each detail image `<name>-fit.png` and list image `<name>-list.png`, which the phone has never
-downloaded; the server maps each name back to the real file (`real_rel`) and fits it. Raise FIT_SUFFIX or
-LIST_SUFFIX to make phones fetch those images again.
+tables name each detail image with FIT_SUFFIX and list image with LIST_SUFFIX, which the phone has never
+downloaded; the server maps each name back to the real file (`real_rel`) and fits it. Raise either suffix to
+make phones fetch those images again.
 """
 from __future__ import annotations
 
@@ -56,7 +56,7 @@ FIT_SUFFIX = "-fit1"
 # 3.5:1 squeezed it into the middle of that frame (operator screenshot, 2026-11-06). They get this name
 # instead (one the phone hasn't cached) and are fitted to BASE_FRAME: 640x392 art is served as it is.
 PLAIN_SUFFIX = "-full1"
-LIST_SUFFIX = "-list3"
+LIST_SUFFIX = "-list4"
 
 
 def names_enabled() -> bool:
@@ -73,7 +73,7 @@ def fit_name(name: str, pad: bool = True) -> str:
 
 
 def fit_list_name(name: str) -> str:
-    """The versioned list image name: `x.png` -> `x-list1.png` when renaming is on."""
+    """The versioned list image name: `x.png` -> `x-list4.png` when renaming is on."""
     if not name or not names_enabled() or not name.lower().endswith(".png") or LIST_SUFFIX + "." in name:
         return name
     return name[:-4] + LIST_SUFFIX + name[-4:]
@@ -136,7 +136,8 @@ def fit(data: bytes, frame: tuple[int, int] = FRAME, contain: bool = False) -> t
         return data, None
     if contain and frame == LIST_FRAME:
         ratio = width / height
-        if any(abs(ratio - expected) / expected <= TOLERANCE for expected in (5.0, 4.0, 2.0)):
+        native_ratios = (5.0, 4.0, 2.0, 640 / 392)
+        if any(abs(ratio - expected) / expected <= TOLERANCE for expected in native_ratios):
             return data, None
         frame = _list_frame(height)
     key_data = data + STYLE.encode() + repr(frame).encode() + (b"contain" if contain else b"pad")
