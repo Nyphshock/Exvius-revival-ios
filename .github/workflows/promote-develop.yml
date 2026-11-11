@@ -1,0 +1,24 @@
+name: Promote develop to main
+
+on:
+  push:
+    branches:
+      - develop
+
+permissions:
+  contents: write
+
+concurrency:
+  group: promote-develop-to-main
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out pushed develop commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Fast-forward main
+        run: git push origin HEAD:main

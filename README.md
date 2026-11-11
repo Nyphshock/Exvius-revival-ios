@@ -479,3 +479,7 @@ Nothing else on your computer, network or tailnet is changed.
 The game engine, the preserved game data and the original Android app are [Exvius Offline](https://github.com/Elvlin/exvius-offline) by Elvlin. This project adds the iPhone server around it. The game data is downloaded from that project's GitHub releases during setup.
 
 Final Fantasy Brave Exvius belongs to Square Enix and gumi. This is an unofficial fan project, not affiliated with either.
+
+## Repository workflow
+
+Make and push changes on the `develop` branch. GitHub Actions fast-forwards `main` to each pushed `develop` commit automatically. Avoid separate commits on `main`; if it moves ahead independently, the promotion will fail safely rather than overwrite it.
