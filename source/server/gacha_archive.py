@@ -4,20 +4,17 @@ from datetime import date
 import json
 from pathlib import Path
 
+from story_seasons import SEASON_IDS, SEASON_LABELS, season_for_date, unlocked_seasons
 
-# Global story starts from the existing calendar's source, Update_Schedule.
-# These are browsing eras, not save progression or real-time availability gates.
-STORY_STARTS = (date(2017, 11, 16), date(2020, 1, 30), date(2021, 11, 18))
+
 COLLABORATIONS = (
     'Brave Frontier', 'Crystal Defenders', 'Deus Ex', 'Dragon Quest',
     'Fullmetal Alchemist', 'Just Cause', "King's Knight", 'Kingdom Hearts',
     'Legend of Mana', 'NieR', 'Octopath Traveler', 'Secret of Mana', 'Star Ocean',
     'Tomb Raider', 'Trials of Mana', 'Valkyrie Profile', 'WOTV', 'Xenogears', 'Katy Perry',
 )
-GROUPS = (('standard', 'Standard'), ('season1', 'Season 1'), ('season2', 'Season 2'),
-          ('season3', 'Season 3'), ('season4', 'Season 4'), ('collaborations', 'Collab'))
-COMMENT_GROUPS = {'0': 'rotation', '1': 'standard', '2': 'season1', '3': 'season2',
-                  '4': 'season3', '5': 'season4', '6': 'collaborations'}
+GROUPS = (('standard', 'Standard'),) + tuple((season, SEASON_LABELS[season]) for season in SEASON_IDS) + (
+    ('collaborations', 'Collab'),)
 # Always-available summons, shown with every group (as on the live game).
 PERMANENT_NAMES = {'Standard Summon', 'Rare Summon', 'Premium 10+1 Summon', '5★ Guaranteed 10+1 Summon'}
 # Original GL9 tab of each GachaMst type code: GachaTopScene::setListLayout
@@ -182,6 +179,46 @@ def _released(banner):
         return None
 
 
+def _banner_season(banner):
+    released = _released(banner)
+    if released:
+        return season_for_date(released)
+    declared = banner.get('season')
+    return declared if declared in SEASON_IDS else None
+
+
+def banner_unlocked(player, banner, families=None):
+    """Story-dated banners unlock cumulatively; stock friend/standard summons remain available."""
+    families = _standard_families() if families is None else families
+    return _banner_unlocked(banner, families, unlocked_seasons(player))
+
+
+def _banner_unlocked(banner, families, unlocked):
+    if (str(banner.get('id') or '') in families or banner.get('name') in PERMANENT_NAMES
+            or banner.get('type') == 'friend'):
+        return True
+    season = _banner_season(banner)
+    return season is None or season in unlocked
+
+
+def filter_banners_for_story(player, banners):
+    """Keep banners whose story checkpoint has been cleared, without changing archive selection."""
+    families = _standard_families()
+    unlocked = unlocked_seasons(player)
+    return [banner for banner in banners if _banner_unlocked(banner, families, unlocked)]
+
+
+def rotation_banners_for_story(player, banners):
+    """Keep the weekly rotation and held-ticket banners, then apply story unlocks."""
+    from gacha_rotation import enabled, rotation_ids
+    eligible = filter_banners_for_story(player, banners)
+    if not enabled():
+        return eligible
+    by_id = {str(banner['id']): banner for banner in eligible}
+    ids = dict.fromkeys(rotation_ids(eligible) + held_ticket_ids(player, eligible))
+    return [by_id[bid] for bid in ids if bid in by_id]
+
+
 def catalogue(banners):
     """Every non-permanent banner belongs to exactly one group; the permanent summons
     appear with every group. Uncertain dates stay under Standard. Collab banners are
@@ -216,14 +253,12 @@ def catalogue(banners):
             continue
         collab = _collaboration(banner)
         released = _released(banner)
+        season = season_for_date(released) if released else _banner_season(banner)
+        if season:
+            members[season].append(('', released or date.min, bid))
         if collab:
             members['collaborations'].append((collab, released or date.min, bid))
-        elif banner.get('season'):
-            members[banner['season']].append(('', released or date.min, bid))
-        elif released:
-            season = 1 + sum(released >= start for start in STORY_STARTS)
-            members['season' + str(season)].append(('', released, bid))
-        else:
+        elif not season:
             members['standard'].append(('', date.min, bid))
     by_id = {str(banner['id']): banner for banner in banners}
     from ffbe_gacha import gacha_type_code
@@ -242,13 +277,6 @@ def catalogue(banners):
 def selected_group(player, groups):
     selected = player.data.get('summon_archive') if player else None
     return next((group for group in groups if group['id'] == selected), groups[0])
-
-
-def _comment_selection(player):
-    """The private profile comment's exact digit selects rotation (0) or an archive group (1-6)."""
-    profile = (getattr(player, 'data', None) or {}).get('profile') or {}
-    message = profile.get('message')
-    return COMMENT_GROUPS.get(message.strip()) if isinstance(message, str) else None
 
 
 def held_ticket_ids(player, banners):
@@ -321,23 +349,24 @@ def used_up(player, banner) -> bool:
 
 def visible_banners(player, banners):
     from gacha_rotation import enabled, rotation_ids
-    selection = _comment_selection(player)
-    if selection is None and player:
-        selection = player.data.get('summon_archive')
-    if selection == 'rotation':
-        ids = rotation_ids(banners) + held_ticket_ids(player, banners)
-    elif selection in {key for key, _label in GROUPS}:
-        groups = catalogue(banners)
-        ids = next(group['ids'] for group in groups if group['id'] == selection)
-    elif enabled():
+    if enabled():
         ids = rotation_ids(banners) + held_ticket_ids(player, banners)
     else:
-        ids = selected_group(player, catalogue(banners))['ids']
+        selection = player.data.get('summon_archive') if player else None
+        if selection in {key for key, _label in GROUPS}:
+            groups = catalogue(banners)
+            ids = next(group['ids'] for group in groups if group['id'] == selection)
+        else:
+            ids = selected_group(player, catalogue(banners))['ids']
     by_id = {str(banner['id']): banner for banner in banners}
     # A once-per-player deal (a "first 10+1" summon, the cash summon) leaves the list once it is used up,
     # as on Global, rather than staying greyed out (2026-11-07, deal banners). Same for a step-up whose
     # rounds are all done.
-    ids = [bid for bid in ids if bid in by_id and not used_up(player, by_id[bid])]
+    families = _standard_families()
+    unlocked = unlocked_seasons(player)
+    ids = [bid for bid in ids if bid in by_id
+           and _banner_unlocked(by_id[bid], families, unlocked)
+           and not used_up(player, by_id[bid])]
     # GL9 sorts schedule rows by descending display order. Publish the archive's
     # series/date order there, rather than preserving unrelated old campaign ranks.
     return [dict(by_id[bid], schedule=dict(by_id[bid].get('schedule') or {},
@@ -349,15 +378,32 @@ def menu(player, banners, selection=''):
     from gacha_rotation import enabled, rotation_ids
     if enabled():
         # One fixed lineup: the season chooser has nothing to choose between.
-        ids = rotation_ids(banners)
+        visible_ids = {str(b['id']) for b in filter_banners_for_story(player, banners)}
+        ids = [bid for bid in rotation_ids(banners)
+               if bid in visible_ids]
         week = {'id': 'rotation', 'label': 'This Week', 'count': len(ids), 'tab': 0}
         return {'groups': [week], 'selected': week}
     groups = catalogue(banners)
+    unlocked = unlocked_seasons(player)
+    groups = [group for group in groups
+              if group['id'] not in SEASON_IDS or group['id'] in unlocked]
+    if 'collaborations' in {group['id'] for group in groups}:
+        by_id = {str(banner['id']): banner for banner in banners}
+        families = _standard_families()
+        unlocked = unlocked_seasons(player)
+        collabs = next(group for group in groups if group['id'] == 'collaborations')
+        collabs['ids'] = [bid for bid in collabs['ids']
+                          if bid in by_id and _banner_unlocked(by_id[bid], families, unlocked)]
+        collabs['count'] = sum(not permanent(by_id[bid]) for bid in collabs['ids'])
     if selection:
         if selection not in {group['id'] for group in groups}:
             raise ValueError('Unknown summon archive group')
         player.data['summon_archive'] = selection
         player.dirty = True
     chosen = selected_group(player, groups)
+    if (player and player.data.get('summon_archive')
+            and player.data['summon_archive'] not in {group['id'] for group in groups}):
+        player.data['summon_archive'] = chosen['id']
+        player.dirty = True
     return {'groups': [{key: group[key] for key in ('id', 'label', 'count', 'tab')} for group in groups],
             'selected': {key: chosen[key] for key in ('id', 'label', 'count', 'tab')}}

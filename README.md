@@ -327,6 +327,20 @@ The container's own log (`docker logs ffbe`) is capped at 60 MB by Docker (3 fil
 
 Your first replay week is recorded in `FFBE_DIR/server/state/replay.json`. Changing the pace later re-times the whole replay from that week. Units you already own stay in your save. Holiday sets come out of the timeline and appear in the week before each real holiday and the holiday's own week. Each holiday brings the next original year that hasn't been shown (if it's less than a year ahead of history), plus any years the replay went past, older ones first. When history runs out, the random rotation takes over with every unit.
 
+**Story seasons**
+
+The Vortex archive and summon banners are grouped by their earliest known Global release date, not by a rerun:
+
+| Season | Release dates | Unlock checkpoint |
+| --- | --- | --- |
+| 1 | First recorded date through 2017-02-28 | Complete the first Lapis story mission |
+| 2 | 2017-03-01 through 2019-05-29 | Complete the first Paladia story mission |
+| 3 | 2019-05-30 through 2021-05-09 | Complete the first Otherworld story mission |
+| 4 | 2021-05-10 through 2024-12-26 | Complete the first Levonia story mission |
+| 5 | 2024-12-27 onward | Complete the first Chaos story mission |
+
+Unlocks are cumulative: reaching a later checkpoint opens all earlier seasons. Collaboration banners and events are also included in their date-based season; their separate Collab filter remains. Stock permanent summons stay available. When a release date is missing, an existing season label is used if available; otherwise the item stays in its existing Standard, Collab, Permanent, or Other group.
+
 **Earned Lapis**
 
 The original game's Lapis income assumed you'd buy Lapis. These settings raise what you earn by playing (Shop purchases are never touched). With the defaults, a story mission's challenges pay about 250 Lapis, a full day of daily quests pays 3,250 Lapis, and every week brings a 10+1's worth of summon tickets.
@@ -401,9 +415,9 @@ Your own hand-picked companions still come from `source/server/friends.yaml`.
 
 | Setting | What it controls |
 | --- | --- |
-| `EXVIUS_SUMMON_ROTATION` | `1` rotates banners weekly; `0` shows every banner at once. |
+| `EXVIUS_SUMMON_ROTATION` | `1` (default) rotates banners weekly, even when the summon archive is disabled; `0` disables the weekly rotation. With the summon archive enabled (the server default), the selected archive group is served; with the archive disabled and rotation off, all banners from unlocked story seasons are served. |
 | `EXVIUS_ROTATION_HOLIDAYS` | `1` (default) keeps holiday summon sets (Christmas, Halloween, Valentine's Day, Easter) for the week before that holiday and the holiday's own week. Holiday events (the Christmas, Halloween, Easter and Valentine's King Mog events and the Halloween Castle; the list is `HOLIDAY_EVENTS` in `source/server/event_archive.py`) follow the same weeks and never open on their history dates. Without the replay, it's one original year at a time, oldest first, so the newest and strongest holiday units come later. `0` mixes them into the normal pool. |
-| `EXVIUS_VORTEX_ROTATION` | `1` (default) makes the Vortex follow the summon rotation: the permanent dungeons are always open, plus the events that originally ran alongside this week's summon sets, so an event's featured units, coins and tickets line up with the banners you can pull. An event opens at each of its Global runs, first runs and reruns alike (`source/server/event_history.json`). Clash of Wills and Dark Visions open only during the periods Global ran them. The Vortex never shows two tiles that look the same: the Chamber of Challenges and Chamber of Crysts areas take turns a week each (Chamber of Challenges' Halloween and Christmas battles only in those holidays' weeks), and later copies of an event show only the first. Events are listed first (holiday events, then newest first), then Clash of Wills and Dark Visions, then the permanent dungeons. `0` opens all 764 archived events at once. |
+| `EXVIUS_VORTEX_ROTATION` | `1` (default) makes the Vortex follow the summon rotation: the permanent dungeons are always open, plus the events that originally ran alongside this week's summon sets, so an event's featured units, coins and tickets line up with the banners you can pull. An event opens at each of its Global runs, first runs and reruns alike (`source/server/event_history.json`). Clash of Wills and Dark Visions open only during the periods Global ran them. The Vortex never shows two tiles that look the same: the Chamber of Challenges and Chamber of Crysts areas take turns a week each (Chamber of Challenges' Halloween and Christmas battles only in those holidays' weeks), and later copies of an event show only the first. Events are listed first (holiday events, then newest first), then Clash of Wills and Dark Visions, then the permanent dungeons. `0` opens all 766 archived event areas whose story seasons have been unlocked (all 766 after every season checkpoint). |
 | `EXVIUS_VORTEX_EXTRA` | How many undated recurring Vortex events (Boss Rush, Cactuar Dunes, Challenge of the Brave, …) open each week. Default `2`. |
 | `EXVIUS_ROTATION_TZ` | Time zone of the weekly change. Default `America/New_York`. |
 | `EXVIUS_ROTATION_DAY` | Day of the change. 0 is Monday, 6 is Sunday. |

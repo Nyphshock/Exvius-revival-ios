@@ -4,10 +4,11 @@ from copy import deepcopy
 import json
 from pathlib import Path
 
-GROUPS = (('all', 'All Events'), ('permanent', 'Permanent'),
-          ('season1', 'Season 1'), ('season2', 'Season 2'),
-          ('season3', 'Season 3'), ('season4', 'Season 4'),
-          ('collaborations', 'Collab'), ('other', 'Other Events'))
+from story_seasons import SEASON_IDS, SEASON_LABELS, season_for_date, season_unlocked, unlocked_seasons
+
+GROUPS = (('all', 'All Events'), ('permanent', 'Permanent')) + tuple(
+    (season, SEASON_LABELS[season]) for season in SEASON_IDS
+) + (('collaborations', 'Collab'), ('other', 'Other Events'))
 _DOCUMENT = None
 
 
@@ -52,6 +53,41 @@ def events():
 
 def area_ids():
     return [str(event['area']) for event in events()]
+
+
+def event_season(row):
+    """The earliest known Global release/run decides the event's story season."""
+    dates = [str(value) for value in (row.get('runs') or []) if value]
+    dates.extend(str(row[key]) for key in ('first_release', 'release') if row.get(key))
+    for window in row.get('windows') or []:
+        if window and window[0]:
+            dates.append(str(window[0]))
+    season = season_for_date(min(dates)) if dates else None
+    if season:
+        return season
+    group = row.get('group')
+    return group if group in SEASON_IDS else None
+
+
+def filter_events_by_story(rows, player):
+    if player is None:
+        return rows
+    unlocked = unlocked_seasons(player)
+    return [row for row in rows
+            if (season := event_season(row)) is None or season in unlocked]
+
+
+def locked_event_areas(player):
+    if player is None:
+        return set()
+    unlocked = unlocked_seasons(player)
+    return {str(row['area']) for row in events()
+            if (season := event_season(row)) is not None and season not in unlocked}
+
+
+def filter_event_areas(areas, player):
+    locked = locked_event_areas(player)
+    return [str(area) for area in areas if str(area) not in locked]
 
 
 # Holiday-themed events: they open with the holiday banners (the week before the holiday and its week, the
@@ -451,17 +487,21 @@ def menu(player, selection=''):
         return activate_mode(player, selection)
     members = defaultdict(list)
     campaigns = listings()
-    rows = [row for row, _aliases in campaigns]
-    permanent = [str(row['area']) for row in rows if row['group'] == 'permanent']
+    rows = filter_events_by_story([row for row, _aliases in campaigns], player)
     for row in rows:
-        members[row['group']].append(str(row['area']))
+        area = str(row['area'])
+        season = event_season(row)
+        if season:
+            members[season].append(area)
+        group = row.get('group')
+        if group in ('permanent', 'collaborations', 'other'):
+            members[group].append(area)
     groups = []
     for key, label in GROUPS:
+        if key in SEASON_IDS and key not in unlocked_seasons(player):
+            continue
         ids = [str(row['area']) for row in rows] if key == 'all' else members[key]
-        if key not in ('all', 'permanent'):
-            ids = list(dict.fromkeys(permanent + ids))
-        groups.append({'id': key, 'label': label, 'ids': ids,
-                       'count': len(rows) if key == 'all' else len(members[key]), 'tab': 0})
+        groups.append({'id': key, 'label': label, 'ids': ids, 'count': len(ids), 'tab': 0})
     if selection:
         if selection not in {row['id'] for row in groups}:
             raise ValueError('Unknown event season')
@@ -469,10 +509,16 @@ def menu(player, selection=''):
             player.data['event_archive'] = selection
             player.dirty = True
     selected = player.data.get('event_archive', 'season1') if player else 'season1'
+    if selected not in {row['id'] for row in groups}:
+        selected = 'all'
+        if player:
+            player.data['event_archive'] = selected
+            player.dirty = True
     group = next((row for row in groups if row['id'] == selected), groups[0])
     from player_state import _load_ndjson
     missions = _load_ndjson('F_MISSION_MST.ndjson', 'qo3PECw6')
-    modes = {str(row['area']): row['native_mode'] for row in events() if row.get('native_mode')}
+    visible_rows = filter_events_by_story(events(), player)
+    modes = {str(row['area']): row['native_mode'] for row in visible_rows if row.get('native_mode')}
     mode_dungeon_ids = sorted({str(m['U9iHsau3']) for m in missions.values()
                                if str(m.get('uv60hgDW')) in modes})
     dungeons = {str(m['U9iHsau3']): {'mode': modes[str(m['uv60hgDW'])], 'area': str(m['uv60hgDW'])}
@@ -483,7 +529,7 @@ def menu(player, selection=''):
     cow = level_rewards()
     dark = sorted((r for r in events() if r['name'] == 'Dark Visions'), key=lambda r: int(r['area']))
     numbered = {r['area']: n for n, r in enumerate(dark, 1)}
-    for row in events():
+    for row in visible_rows:
         candidates = [did for did in row['dungeons'] if did in dungeons]
         if not candidates:
             continue
@@ -492,10 +538,12 @@ def menu(player, selection=''):
             dungeons[did]['entry'] = did == entry
         names[entry] = (cow[row['area']]['name'] if row.get('native_mode') == 'tfa' else
                         'Dark Visions ' + str(numbered[row['area']]) if row['area'] in numbered else row['name'])
-    return {'groups': groups, 'selected': group, 'area_ids': area_ids(),
+    visible_area_ids = {str(row['area']) for row in rows}
+    return {'groups': groups, 'selected': group, 'area_ids': [str(row['area']) for row in rows],
             'native_modes': modes, 'native_dungeons': dungeons, 'dungeon_names': names,
             'mode_dungeon_ids': mode_dungeon_ids,
-            'area_aliases': {str(row['area']): aliases for row, aliases in campaigns if aliases}}
+            'area_aliases': {str(row['area']): aliases for row, aliases in campaigns
+                             if aliases and str(row['area']) in visible_area_ids}}
 
 
 def activate_mode(player, selection):
@@ -510,6 +558,10 @@ def activate_mode(player, selection):
             or any(allowed.get(str(r.get('uv60hgDW'))) != mode for r in rows)):
         raise ValueError('Unknown event season')
     area = str(rows[0]['uv60hgDW'])
+    event = next((row for row in events() if str(row['area']) == area), None)
+    season = event_season(event) if event else None
+    if season and not season_unlocked(player, season):
+        raise ValueError('Story season is locked')
     feature = deepcopy(player.data.get('exvius_' + mode, {}))
     if feature.get('active'):
         raise ValueError('Finish or retire the current battle first')

@@ -724,6 +724,9 @@ def serve_gacha_info(spec, reply_id: str):
     if os.environ.get('EXVIUS_SUMMON_ARCHIVE') == '1':
         from gacha_archive import visible_banners
         banners = visible_banners(State.player, banners)
+    else:
+        from gacha_archive import rotation_banners_for_story
+        banners = rotation_banners_for_story(State.player, banners)
     out = dict(spec) if isinstance(spec, dict) else {}
     out.update(gacha_groups(banners))
     out[GACHA_USER_INFO_TAG] = State.player.gacha_user_rows(banners) if State.player else []
@@ -815,11 +818,19 @@ def serve_gacha(spec, plaintext: str | None = None, reply_id=None):
                 if os.environ.get('EXVIUS_SUMMON_ARCHIVE') == '1':
                     from gacha_archive import visible_banners
                     banners = visible_banners(State.player, banners)
+                else:
+                    from gacha_archive import rotation_banners_for_story
+                    banners = rotation_banners_for_story(State.player, banners)
                 out[GACHA_USER_INFO_TAG] = State.player.gacha_user_rows(banners)
             except Exception as exc:  # noqa: BLE001 -- the decline itself must still go out
                 _note(f"gacha: counts not refreshed on a declined pull ({exc!r})")
         return out
     if banner is not None:
+        if State.player:
+            from gacha_archive import banner_unlocked
+            if not banner_unlocked(State.player, banner):
+                _note(f"gacha: banner {banner['id']} refused because its story season is locked")
+                return decline()
         # The CLIENT's request tokens (verified live 2026-09-21, `out/requests/*`, GachaExeRequest):
         #   `2RtVPS3b` = the REPEAT COUNT (1 for a single, 10 for a 10x)  -- NOT the ticket id
         #   `zJ1A6HXm` = the TICKET ID the player chose (12 = F_TICKET_MST item 180, the 5-star EX ticket)
@@ -906,6 +917,9 @@ def serve_gacha(spec, plaintext: str | None = None, reply_id=None):
                 if os.environ.get('EXVIUS_SUMMON_ARCHIVE') == '1':
                     from gacha_archive import visible_banners
                     banners = visible_banners(State.player, banners)
+                else:
+                    from gacha_archive import rotation_banners_for_story
+                    banners = rotation_banners_for_story(State.player, banners)
                 refreshed = gacha_groups(banners)
                 out[GACHA_DETAIL_TAG] = refreshed[GACHA_DETAIL_TAG]
                 out[GACHA_SCHEDULE_TAG] = refreshed[GACHA_SCHEDULE_TAG]

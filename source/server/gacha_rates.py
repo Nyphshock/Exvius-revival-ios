@@ -215,6 +215,10 @@ def page(banner_id):
     banner = next((b for b in all_banners() if str(b['id']) == str(banner_id)), None)
     if banner is None:
         return None
+    from ffbe_state import State
+    from gacha_archive import banner_unlocked
+    if not banner_unlocked(State.player, banner):
+        return None
     from urllib.parse import quote
     name = str(banner.get('name') or 'Summon')
     art = (banner.get('art') or {}).get('banner') or ''
@@ -308,6 +312,9 @@ def index_page() -> str:
     if os.environ.get('EXVIUS_SUMMON_ARCHIVE') == '1':
         from gacha_archive import visible_banners
         banners = visible_banners(State.player, banners)
+    else:
+        from gacha_archive import rotation_banners_for_story
+        banners = rotation_banners_for_story(State.player, banners)
     by_id = {str(b['id']): b for b in banners}
     ids = list(by_id)
     parts = ['<header class="mast"><p class="eyebrow">Summon Rates</p><h1>This week\'s summons</h1></header>',

@@ -3062,21 +3062,31 @@ def serve_event_gate(spec, reply_id):
         archive_events = None
         from exvius_events import policy_path
         saved_policy = policy_path(DATA_ROOT)
+        from event_archive import filter_event_areas, filter_events_by_story
         if (os.environ.get('EXVIUS_EVENT_ARCHIVE') == '1' and
                 not (saved_policy is not None and saved_policy.exists())):
             from event_archive import weekly_events
             # This week's events only, when the Vortex follows the summon rotation (event_archive.py).
-            archive_events = weekly_events()
+            archive_events = filter_events_by_story(weekly_events(), State.player)
             policy = dict(policy, areas=[str(row['area']) for row in archive_events], permanent=True)
+        else:
+            policy = dict(policy, areas=filter_event_areas(policy['areas'], State.player))
     except (OSError, ValueError) as exc:
         _note("event policy invalid; no extra gates served: " + str(exc))
         return spec
     facts = ([(row['area'], row['first_dungeon'], row['first_mission']) for row in archive_events]
              if archive_events is not None else _event_area_facts(policy["areas"]))
-    if not facts:
-        return spec
     spec = _as_spec(spec)
     rows = [dict(r) for r in (spec.get(EVENT_GATE_TAG) or []) if isinstance(r, dict)]
+    from event_archive import locked_event_areas
+    locked = locked_event_areas(State.player)
+    unlocked_rows = [r for r in rows if str(r.get('uv60hgDW')) not in locked]
+    removed_locked = len(unlocked_rows) != len(rows)
+    rows = unlocked_rows
+    if not facts:
+        if removed_locked:
+            spec[EVENT_GATE_TAG] = rows
+        return spec
     # Quests a later run added are held back this week (event_archive.only_existing_quests), shipped rows too
     # (the carriers hold Chamber of the Fallen's 2021 Heavenly Flames).
     held = {str(r['area']): {str(m) for m in r.get('held_back') or []} for r in archive_events or []}
@@ -3087,7 +3097,7 @@ def serve_event_gate(spec, reply_id):
     else:
         gate_dropped = False
     have = {str(r.get("uv60hgDW")) for r in rows}
-    gate_changed = gate_dropped
+    gate_changed = gate_dropped or removed_locked
     selected = {f[0] for f in facts}
     from exvius_raid_progress import personal_event
     raids = {area: personal_event(dungeon_id=dungeon) for area, dungeon, _mission in facts}
