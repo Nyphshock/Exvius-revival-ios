@@ -5,8 +5,8 @@ a fixed frame about 3.5 times as wide as it is tall, and stretches whatever imag
 Many of the archived banners are 640x160 or 640x392, so on the iPhone their lettering came out squashed
 (operator screenshots, 2026-11-05). The Android build fits them with a hook (source/exvius/summon_art.js);
 the iPhone has none, so the server pads each such image to the frame's proportions instead, centred on a
-blurred, darkened copy of itself. List art (`gacha/main/`) keeps its native 640x160, 640x320, and 640x392
-formats; only unusual proportions are contained, so tall banners retain the full-height look of the stock list.
+blurred, darkened copy of itself. List art (`gacha/main/`) is never cropped or height-limited: images wider than
+640 px are only scaled down, preserving their aspect ratio and full natural height in the stock list.
 
 Results are cached in ios-cache/banner-fit/. Needs Pillow; without it, or with EXVIUS_IOS_BANNER_FIT=0,
 images are served as they are.
@@ -26,9 +26,8 @@ import os
 FRAME = (640, 183)          # the detail frame's proportions, measured from the phone (848 x 242 points)
 BASE_FRAME = (640, 392)     # the base GachaDetailScene's frame (friend-point and other layout-0 summons)
 LIST_FRAME = (640, 160)     # wide GachaTopScene list slot
-LIST_DOUBLE_FRAME = (640, 320)
 TOLERANCE = 0.06            # images already within 6% of the frame's shape are left alone
-STYLE = "blur5"             # part of the cache key: change it when the fitting's look changes
+STYLE = "blur6"             # part of the cache key: change it when the fitting's look changes
 
 
 def _backdrop(image, canvas):
@@ -56,7 +55,7 @@ FIT_SUFFIX = "-fit1"
 # 3.5:1 squeezed it into the middle of that frame (operator screenshot, 2026-11-06). They get this name
 # instead (one the phone hasn't cached) and are fitted to BASE_FRAME: 640x392 art is served as it is.
 PLAIN_SUFFIX = "-full1"
-LIST_SUFFIX = "-list4"
+LIST_SUFFIX = "-list5"
 
 
 def names_enabled() -> bool:
@@ -73,7 +72,7 @@ def fit_name(name: str, pad: bool = True) -> str:
 
 
 def fit_list_name(name: str) -> str:
-    """The versioned list image name: `x.png` -> `x-list4.png` when renaming is on."""
+    """The versioned list image name: `x.png` -> `x-list5.png` when renaming is on."""
     if not name or not names_enabled() or not name.lower().endswith(".png") or LIST_SUFFIX + "." in name:
         return name
     return name[:-4] + LIST_SUFFIX + name[-4:]
@@ -85,10 +84,6 @@ def _sub(rel: str) -> bool:
 
 def _main(rel: str) -> bool:
     return "/static_banner/gacha/main/" in "/" + rel
-
-
-def _list_frame(height: int) -> tuple[int, int]:
-    return LIST_DOUBLE_FRAME if height > LIST_FRAME[1] else LIST_FRAME
 
 
 def is_plain(rel: str) -> bool:
@@ -121,7 +116,7 @@ def _cache_dir() -> str:
 
 
 def fit(data: bytes, frame: tuple[int, int] = FRAME, contain: bool = False) -> tuple[bytes, str | None]:
-    """(bytes, note): the image fitted to the frame, or the input unchanged."""
+    """(bytes, note): detail art padded to its frame or list art width-fitted without cropping."""
     try:
         from PIL import Image
     except ImportError:
@@ -134,12 +129,9 @@ def fit(data: bytes, frame: tuple[int, int] = FRAME, contain: bool = False) -> t
     width, height = image.size
     if width <= 0 or height <= 0:
         return data, None
-    if contain and frame == LIST_FRAME:
-        ratio = width / height
-        native_ratios = (5.0, 4.0, 2.0, 640 / 392)
-        if any(abs(ratio - expected) / expected <= TOLERANCE for expected in native_ratios):
+    if contain:
+        if width <= frame[0]:
             return data, None
-        frame = _list_frame(height)
     key_data = data + STYLE.encode() + repr(frame).encode() + (b"contain" if contain else b"pad")
     key = hashlib.sha1(key_data).hexdigest()[:20]
     cached = os.path.join(_cache_dir(), key + ".png")
@@ -148,14 +140,9 @@ def fit(data: bytes, frame: tuple[int, int] = FRAME, contain: bool = False) -> t
             return fh.read(), "letterboxed (cached)"
     target = frame[0] / frame[1]
     if contain:
-        if (width, height) == frame:
-            return data, None
-        scale = min(frame[0] / width, frame[1] / height)
-        art = image.convert("RGBA").resize((max(1, round(width * scale)), max(1, round(height * scale))),
-                                            Image.LANCZOS)
-        out = _backdrop(image, frame)
-        out.paste(art, ((frame[0] - art.width) // 2, (frame[1] - art.height) // 2), art)
-        canvas = frame
+        scale = frame[0] / width
+        canvas = (frame[0], max(1, round(height * scale)))
+        out = image.convert("RGBA").resize(canvas, Image.LANCZOS)
     else:
         if abs(width / height - target) / target <= TOLERANCE:
             return data, None
@@ -172,5 +159,5 @@ def fit(data: bytes, frame: tuple[int, int] = FRAME, contain: bool = False) -> t
     result = buf.getvalue()
     with open(cached, "wb") as fh:
         fh.write(result)
-    method = "contained" if contain else "letterboxed"
+    method = "width-fitted" if contain else "letterboxed"
     return result, f"{method} {width}x{height} -> {canvas[0]}x{canvas[1]}"
