@@ -4,6 +4,38 @@ Each entry is one update to this repo. To update: in your repo folder run `git p
 
 ## 2026-11-11: Vision Cards and Aquapolis
 
+## 2026-11-10: More units in the 5★ Select Summon
+
+- The 5★ Select Summon now also offers Global's limited and collaboration 5★ units (80 more, such as 2B, Sora, Edward Elric and Lara Croft), at the same 10 tickets. Open the game twice so it picks up the new list.
+
+## 2026-11-10: 5★ Select Summon works
+
+- Fixed the 5★ Select Summon's "Ticket Summon" button doing nothing. It now opens the unit list; pick a unit and 10 5★ Select tickets are spent on it.
+- The 5★ Select Summon shows its animated field again.
+
+## 2026-11-10: Ticket summons show up
+
+- Fixed bought summon tickets with no summon to use them on, such as the 1/10 NV Summon Tickets from the VIP Shop. While you hold them, NV Guaranteed EX Summon shows on the summon screen; one summon takes 10 tickets. The same fix covers the 5★ Select, Arena and 5+1 ticket summons.
+- Summon tickets aren't listed under Items. They show on the summon that uses them, with how many you have.
+
+## 2026-11-10: Mana Mystery listed once
+
+- Mana Mystery now lists its five quests once instead of twice. The second set (same stages, double mission Lapis) is gone. Producer of the Crystal is now a single quest.
+- If you cleared quests in Mana Mystery's second set, the matching quests in the remaining set pay their first-clear rewards again.
+
+## 2026-11-10: Copied quests removed
+
+- Events that listed the same quest several times now list it once: Chamber of Challenges (each area went from up to 110 quests to 20), Elemental Turn Challenge and Producer of the Crystal. Only exact copies were removed: same battle, missions and rewards.
+
+## 2026-11-10: Event currency on every event quest
+
+- Fixed event currency never dropping in some event quests, such as Mana Mystery's second set of quests (its ELT included). 103 quests in 18 events had no currency drops; their monsters now drop it, about as much as the event's other quests of the same level.
+
+## 2026-11-10: Event currency from battles
+
+- Fixed event currency from enemies (such as Candy in Mana Mystery) not arriving. If the game doesn't count the currency the enemies dropped, the server now adds it at the end of the battle, so every clear pays it.
+
+
 - Vision Cards equipped on Neo Vision units (such as Blade of Vengeance Ibara) now stay equipped; before, the slot looked empty. Loading a saved party no longer takes units' Vision Cards off.
 - Memories from the Aquapolis is hidden from the Vortex for now: its stage files were lost, so it had no treasure chests and no proper ending.
 - A summoned Neo Vision unit now comes with a random Vision Card from the cards Global had in its summon pool at that point in the replay, like in Global. A unit's own card comes from EX awakening (EX+1 and EX+3), as before.
