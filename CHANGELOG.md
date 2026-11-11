@@ -2,6 +2,12 @@
 
 Each entry is one update to this repo. To update: in your repo folder run `git pull`, then from `ios-server` run `docker compose build && docker compose up -d`. Your save isn't touched. Open the game twice afterwards so it picks up the new data.
 
+## 2026-11-11: Missed rewards, Chamber drops, search and summons
+
+- First-clear rewards for already-cleared quests with no payment record can now be sent by mail, after the existing one-time back-pay. Units and recipes already owned are excluded; `EXVIUS_FIRST_CLEAR_MISSED=preview` logs the proposed rewards without mailing them.
+- Added the missing Global drops to the always-open Chambers and esper Tests.
+- Vision Card search now recognizes English names, Neo Vision summons use the NV animation fallback instead of a chest animation, and unit pots dropped in battles are credited to enhancement points.
+
 ## 2026-11-11: Vision Cards and Aquapolis
 
 - Vision Cards equipped on Neo Vision units (such as Blade of Vengeance Ibara) now stay equipped; before, the slot looked empty. Loading a saved party no longer takes units' Vision Cards off.

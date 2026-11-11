@@ -471,7 +471,7 @@ def _credit_mission_rewards(plaintext: str | None, spec=None):
     (`player_state_schema.md` §4, SW-63). This credits what the client reported:
 
       * `Wdi3MAs2` = gil earned      -> `add_currency("gil", …)` (served as `7UR4J2SE` next refresh)
-      * `xF9Sr1a6` = `cat:item:count[,…]`  (the 3-field `addItem(20,0,csv)` shape) -> `grant_item`
+      * `xF9Sr1a6` = `cat:item:count[,…]`  (the 3-field `addItem(20,0,csv)` shape) -> `_grant_items`
       * **`wuUakq71` (from the REPLY spec, not the request) = rank points for THIS battle** ->
         `add_rank_exp` (served as `B6H34Mea` on `3oU9Ktb7` next refresh). The reply grants the delta; the
         client applies it locally. Crediting it is what lets rank actually advance -- without it the next
@@ -502,6 +502,7 @@ def _credit_mission_rewards(plaintext: str | None, spec=None):
     if isinstance(spec, dict):
         spec = copy.deepcopy(spec)   # every write below lands on a private copy, never the shared payload
     # This mutation runs under claim_mission_rewards' durable attempt guard.
+    # Kind 28 is unit-series enhancement points, not a bag item; route all reported rows through the reward router.
     reported = {}
     archive = req.get('nSG9Jb1s') or []
     for row in archive if isinstance(archive, list) else []:
@@ -517,13 +518,23 @@ def _credit_mission_rewards(plaintext: str | None, spec=None):
         before = int(State.player.currencies.get("gil", 0))
         if State.player.add_currency("gil", int(gil)) != before:
             paid.append(f"{int(gil)}gil")
+    reported = {}
     for entry in str(src.get("xF9Sr1a6") or "").split(","):
         f = entry.split(":")
         if len(f) < 3 or not f[0].isdigit() or not f[1].isdigit() or not f[2].isdigit():
             continue
-        before = State.player.item_count(int(f[0]), f[1])
-        if State.player.grant_item(int(f[0]), f[1], int(f[2])) != before:
+        row = {"kind": int(f[0]), "id": int(f[1]), "count": int(f[2])}
+        reported[(row["kind"], str(row["id"]))] = reported.get((row["kind"], str(row["id"])), 0) + row["count"]
+        if State.player._can_credit(row) and State.player._grant_items([row]) == [row]:
             paid.append(f"{f[0]}:{f[1]}x{f[2]}")
+    # The phone omits some rolled unit-pot drops; credit only the amount not already reported.
+    if mission_result_from(plaintext).get('cleared') is True:
+        attempt = State.player.data.get("exvius_repeat", {}).get("attempt", {})
+        for iid, count in (attempt.get("series_drops") or {}).items():
+            missing = int(count) - reported.get((28, str(iid)), 0)
+            row = {"kind": 28, "id": int(iid), "count": missing}
+            if missing > 0 and State.player._can_credit(row) and State.player._grant_items([row]) == [row]:
+                paid.append(f"28:{iid}x{missing} (not reported)")
     # Rank points come from the REPLY (the request never carries them): `wuUakq71` is the delta granted
     # for this battle. Credit the total into `rank.exp` so the next `3oU9Ktb7` agrees with the client.
     if isinstance(spec, dict):

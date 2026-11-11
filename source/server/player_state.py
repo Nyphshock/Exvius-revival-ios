@@ -1353,10 +1353,9 @@ def need_exp(level) -> int:
     return int(row[TEAM_NEED_EXP]) if row and row.get(TEAM_NEED_EXP) else 0
 
 
-# `F_GACHA_EFFECT_PATTERN_MST` is keyed `zoU5J3Kq` and carries a rarity column `9fW0TePj` and a block list
-# `wpoLx6h8`. It is ONE-TO-MANY per rarity (16 rows at rarity 5), so the choice is AUTHORED: the
-# lowest-numbered row of the granted rarity. (For rarity 5 that is id 9, the pattern the operator confirmed
-# renders a rainbow -- schema §3.8.) The client does NOT validate the pattern against the unit.
+# `F_GACHA_EFFECT_PATTERN_MST` is keyed `zoU5J3Kq` with rarity `9fW0TePj`, group `K6XrFi79`, and weight
+# `ixDq7yJ8`. Prefer a banner-specific row; generic NV unit patterns use their shipped weights. Exclude the
+# chest and Vision Card groups from the unit fallback.
 def effect_pattern_for(rarity, gacha_id=None) -> str | None:
     """`zoU5J3Kq` for a draw. `F_GACHA_EFFECT_PATTERN_MST` is keyed by **(gachaId `X1IuZnj2`, rarity
     `9fW0TePj`)** -- not rarity alone -- so prefer a row for THIS gacha id and fall back to the lowest id of
@@ -1372,6 +1371,24 @@ def effect_pattern_for(rarity, gacha_id=None) -> str | None:
         exact = ids_for(lambda r: str(r.get("X1IuZnj2")) == str(gacha_id))
         if exact:
             return str(exact[0])
+    if str(rarity) == "7":
+        nv = [r for r in rows if str(r.get("9fW0TePj")) == "7" and str(r.get("K6XrFi79")) == "200008"
+              and str(r.get("X1IuZnj2") or "0") == "0" and str(r.get("zoU5J3Kq", "")).isdigit()]
+        if nv:
+            weights = []
+            for row in nv:
+                try:
+                    weights.append(max(0, int(row.get("ixDq7yJ8") or 0)))
+                except (TypeError, ValueError):
+                    weights.append(0)
+            chosen = random.choices(nv, weights=weights)[0] if sum(weights) else nv[0]
+            return str(chosen["zoU5J3Kq"])
+    unit_row = lambda r: str(r.get("K6XrFi79")) not in ("100001", "200009")
+    allids = ids_for(unit_row)
+    if allids:
+        return str(allids[0])
+    if str(rarity).isdigit() and int(rarity) > 1:
+        return effect_pattern_for(int(rarity) - 1, gacha_id)
     allids = ids_for(lambda r: True)
     return str(allids[0]) if allids else None
 
