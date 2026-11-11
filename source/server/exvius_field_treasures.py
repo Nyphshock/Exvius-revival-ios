@@ -60,9 +60,9 @@ def _mission_treasures(out, request):
     if (attempt.get('mid') != mid or attempt.get('status') != 'completed'
             or not attempt.get('normal_rewards_recorded')):
         return out
-    # GL9 MissionResultRequest serializes opened-chest tuples in Z7G0yxXe.
+    # GL9 MissionResultRequest serializes opened-chest tuples by reward kind.
     # R1kg3EBA is retained for the earlier request form used by saved clients.
-    reported = {entry for channel in ('Z7G0yxXe', 'R1kg3EBA')
+    reported = {entry for channel in (*CHEST_CHANNELS.values(), 'R1kg3EBA')
                 for entry in str(results[0].get(channel) or '').split(',') if entry}
     opened = set(str(nodes[0].get('dIPkNn61') or '').split(','))
     display = {}
