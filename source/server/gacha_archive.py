@@ -256,8 +256,17 @@ def held_ticket_ids(player, banners):
     With the weekly rotation on they would otherwise be hidden, and a bought ticket would have no banner."""
     if player is None:
         return []
-    out = []
-    for banner in banners:
+    import json
+    out, seen = [], set()
+    # Earliest first, so of identical ticket summons the older one is kept (9200022 over 9200023). Different
+    # reward quantities, even with the same unit pool, keep separate banners (9200029 vs 9503470).
+    def released(banner):
+        return str(banner.get('release') or (banner.get('community') or {}).get('release') or '9999')
+    for banner in sorted(banners, key=lambda b: (released(b), str(b['id']))):
+        # Only ticket summons: a deal of another kind that happens to cost a ticket (9500060 "5★ Select
+        # Ticket Lapis Summon", a 2019 `exchange` deal paid with ticket 260) isn't opened by holding it.
+        if banner.get('deal') and banner.get('deal') != 'ticket':
+            continue
         cost = banner.get('cost')
         cost = cost[0] if isinstance(cost, list) and cost else cost
         # `item` costs are bag items (type 20); `important` costs are important items (type 23), e.g. the
@@ -271,8 +280,27 @@ def held_ticket_ids(player, banners):
         except Exception:  # noqa: BLE001 -- no inventory, no banner
             held = 0
         if held > 0:
+            community = banner.get('community') or {}
+            reward_pool = banner.get('reward_pool')
+            signature = {
+                'pool': banner.get('pool'),
+                'reward_pool': reward_pool,
+                'community_unit_ids': community.get('unit_ids') or [],
+                'pool_rule': banner.get('pool_rule'),
+                'guarantee': banner.get('guarantee'),
+                'guarantee_slots': banner.get('guarantee_slots'),
+                'steps': banner.get('steps'),
+                'bonus_rewards': banner.get('bonus_rewards'),
+                'secondary_offer': banner.get('secondary_offer'),
+            }
+            same = (kind, str(cost['item_id']), int(cost.get('amount') or 1),
+                    json.dumps(signature, sort_keys=True), banner.get('draws'), banner.get('type'))
+            if same in seen:
+                continue
+            seen.add(same)
             out.append(str(banner['id']))
-    return out
+    order = {str(b['id']): i for i, b in enumerate(banners)}
+    return sorted(out, key=lambda bid: order[bid])    # listed in the banners' own order, as before
 
 
 def used_up(player, banner) -> bool:

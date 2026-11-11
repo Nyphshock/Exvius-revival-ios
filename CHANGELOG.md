@@ -4,9 +4,33 @@ Each entry is one update to this repo. To update: in your repo folder run `git p
 
 ## 2026-11-11: Vision Cards and Aquapolis
 
+- Vision Cards equipped on Neo Vision units (such as Blade of Vengeance Ibara) now stay equipped; before, the slot looked empty. Loading a saved party no longer takes units' Vision Cards off.
+- Memories from the Aquapolis is hidden from the Vortex for now: its stage files were lost, so it had no treasure chests and no proper ending.
+- A summoned Neo Vision unit now comes with a random Vision Card from the cards Global had in its summon pool at that point in the replay, like in Global. A unit's own card comes from EX awakening (EX+1 and EX+3), as before.
+
+## 2026-11-11: Farplane Tower of Earth gifts
+
+- If you beat a Tower of Earth boss in the Farplane (White Dragon, Demon Chimera, Brachiosaur, Erinyes) but never got its gift (Murasame, Force Armor, Killer Bow, Apollo Harp), it now arrives by mail the next time you start the game. Gifts you already have aren't sent again.
+
+## 2026-11-11: Story recipes, the Guide
+
+- Fixed recipes the story gives never unlocking: the crafting tutorial's Bronze Knife recipe (with 3 Copper Ore) now comes after Earth Shrine - Exit, and the Magic Key recipe with the first clear of Grandshelt Castle - Throne Room. If you're already past those points, they arrive by mail the next time you start the game.
+- The Guide now checks off units, items, equipment, materia and Vision Cards you have, including the lower forms of units you've awakened (for example 2★ Rain and Lasswell). Monsters are checked off from battles you fight from now on, with their knockdown counts and Libra scans. Units and items you sold or used up before this update can't be recovered.
+
+## 2026-11-11: Daily summons, Mana Mystery shop
+
+- Fixed once-a-day summons (such as the Lunar New Year free summon) showing a pull available again in the evening after you'd used it. The day now resets at 04:00 UTC (11 pm New York time in winter), like the server's other daily resets, and the summon screen shows it the same way.
+- Fixed "A connection error has occurred" when buying Aura Glove or Ninja's Trump in the Mana Mystery (Secret of Mana) shop. Both can be bought now, and they also show in the Shop's exchange list. Every other exchange item was checked and buys fine.
+
+## 2026-11-10: Free summons after ticket summons, extra ticket banners
+
+- Fixed a free daily summon (such as Celebrating Lunar New Year) showing a white crystal and giving nothing after you'd used a ticket summon. The game was still naming the last ticket you used; the server now ignores a ticket the summon doesn't take, and a free summon never uses up a ticket.
+- A summon that fails no longer shows "Already Summoned" when it wasn't counted.
+- Holding a ticket now only adds that ticket's own summon. The 2019 "5★ Select Ticket Lapis Summon" no longer appears in Limited Time, and exact duplicate ticket summons show once; reruns with different reward pools remain separate.
+
 ## 2026-11-10: More units in the 5★ Select Summon
 
-- The 5★ Select Summon now also offers Global's limited and collaboration 5★ units (80 more, such as 2B, Sora, Edward Elric and Lara Croft), at the same 10 tickets. Open the game twice so it picks up the new list.
+- The 5★ Select Summon now also offers Global's limited and collaboration 5★ units (80 more, such as 2B, Sora, Edward Elric and Lilith), at the same 10 tickets. Open the game twice so it picks up the new list.
 
 ## 2026-11-10: 5★ Select Summon works
 
@@ -34,11 +58,6 @@ Each entry is one update to this repo. To update: in your repo folder run `git p
 ## 2026-11-10: Event currency from battles
 
 - Fixed event currency from enemies (such as Candy in Mana Mystery) not arriving. If the game doesn't count the currency the enemies dropped, the server now adds it at the end of the battle, so every clear pays it.
-
-
-- Vision Cards equipped on Neo Vision units (such as Blade of Vengeance Ibara) now stay equipped; before, the slot looked empty. Loading a saved party no longer takes units' Vision Cards off.
-- Memories from the Aquapolis is hidden from the Vortex for now: its stage files were lost, so it had no treasure chests and no proper ending.
-- A summoned Neo Vision unit now comes with a random Vision Card from the cards Global had in its summon pool at that point in the replay, like in Global. A unit's own card comes from EX awakening (EX+1 and EX+3), as before.
 
 ## 2026-11-10: Tall summon banners and faster loading
 
