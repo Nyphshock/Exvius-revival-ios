@@ -209,13 +209,20 @@ def filter_banners_for_story(player, banners):
 
 
 def rotation_banners_for_story(player, banners):
-    """Keep the weekly rotation and held-ticket banners, then apply story unlocks."""
+    """Keep rotation and held-ticket banners, plus every banner in unlocked replay seasons."""
     from gacha_rotation import enabled, rotation_ids
     eligible = filter_banners_for_story(player, banners)
     if not enabled():
         return eligible
     by_id = {str(banner['id']): banner for banner in eligible}
-    ids = dict.fromkeys(rotation_ids(eligible) + held_ticket_ids(player, eligible))
+    ids = list(dict.fromkeys(rotation_ids(eligible) + held_ticket_ids(player, eligible)))
+    import replay
+    if replay.enabled():
+        unlocked = unlocked_seasons(player)
+        families = _standard_families()
+        ids.extend(str(banner['id']) for banner in eligible
+                   if not permanent(banner, families) and _banner_season(banner) in unlocked)
+    ids = dict.fromkeys(ids)
     return [by_id[bid] for bid in ids if bid in by_id]
 
 
@@ -348,9 +355,9 @@ def used_up(player, banner) -> bool:
 
 
 def visible_banners(player, banners):
-    from gacha_rotation import enabled, rotation_ids
+    from gacha_rotation import enabled
     if enabled():
-        ids = rotation_ids(banners) + held_ticket_ids(player, banners)
+        ids = [str(banner['id']) for banner in rotation_banners_for_story(player, banners)]
     else:
         selection = player.data.get('summon_archive') if player else None
         if selection in {key for key, _label in GROUPS}:
@@ -375,12 +382,10 @@ def visible_banners(player, banners):
 
 
 def menu(player, banners, selection=''):
-    from gacha_rotation import enabled, rotation_ids
+    from gacha_rotation import enabled
     if enabled():
-        # One fixed lineup: the season chooser has nothing to choose between.
-        visible_ids = {str(b['id']) for b in filter_banners_for_story(player, banners)}
-        ids = [bid for bid in rotation_ids(banners)
-               if bid in visible_ids]
+        # Replay adds all banners from the story seasons this player has unlocked.
+        ids = [str(banner['id']) for banner in rotation_banners_for_story(player, banners)]
         week = {'id': 'rotation', 'label': 'This Week', 'count': len(ids), 'tab': 0}
         return {'groups': [week], 'selected': week}
     groups = catalogue(banners)

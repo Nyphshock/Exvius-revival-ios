@@ -4960,6 +4960,10 @@ class PlayerState:
             if favourites.get('pJ9Eo6cn'):
                 out['8QNSBeP9'] = [{'H5jBL0Vf': iid, 'zF6QIY2r': group}
                                    for iid, group in favourites['pJ9Eo6cn'].items()]
+        if str(reply_id) == 'mRPo5n2j':
+            # UpdateSwitchInfoRequest can run while the party and equipment editors have unsaved changes.
+            # Replacing their client-side lists here would discard those pending edits.
+            return out
         for tag, rows in groups.items():
             out[tag] = rows
         if str(reply_id) == "pB3st6Tg":

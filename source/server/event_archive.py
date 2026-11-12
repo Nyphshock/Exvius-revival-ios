@@ -275,6 +275,31 @@ def weekly_events(rows=None, now=None):
                                                    if str(row.get('area')) not in hidden_areas()], win))
 
 
+def vortex_events(player, now=None):
+    """This week's events plus every archived event in the player's unlocked story seasons."""
+    current = filter_events_by_story(weekly_events(now=now), player)
+    if not rotation_enabled():
+        return current
+
+    current_areas = {str(row['area']) for row in current}
+    current_looks = {(row['name'], art_key(row)) for row in current}
+    unlocked = unlocked_seasons(player)
+    seasonal = []
+    for row, _aliases in listings():
+        season = event_season(row)
+        area = str(row['area'])
+        if (season not in unlocked or area in current_areas or area in hidden_areas()
+                or (row['name'], art_key(row)) in current_looks):
+            continue
+        runs = [str(run) for run in row.get('runs') or [row.get('release')]
+                if run and season_for_date(run) == season]
+        seasonal.append(dict(row, release=max(runs) if runs else row.get('release')))
+
+    seasonal = _one_per_look(seasonal, lambda group: min(group, key=lambda row: int(row['area'])))
+    seasonal.sort(key=lambda row: (str(row.get('release') or ''), int(row['area'])), reverse=True)
+    return current + hide_clone_quests(only_existing_quests(seasonal))
+
+
 
 # --- only the quests that existed in that run (operator's request, 2026-11-10) -----------------------
 # An open event used to serve every quest its area holds, including ones a later run added (Chamber of the

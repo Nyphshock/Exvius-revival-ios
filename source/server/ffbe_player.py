@@ -3062,12 +3062,12 @@ def serve_event_gate(spec, reply_id):
         archive_events = None
         from exvius_events import policy_path
         saved_policy = policy_path(DATA_ROOT)
-        from event_archive import filter_event_areas, filter_events_by_story
+        from event_archive import filter_event_areas, vortex_events
         if (os.environ.get('EXVIUS_EVENT_ARCHIVE') == '1' and
                 not (saved_policy is not None and saved_policy.exists())):
-            from event_archive import weekly_events
-            # This week's events only, when the Vortex follows the summon rotation (event_archive.py).
-            archive_events = filter_events_by_story(weekly_events(), State.player)
+            # The replay week's events remain open, and story checkpoints also open every event in
+            # the player's unlocked seasons (event_archive.py).
+            archive_events = vortex_events(State.player)
             policy = dict(policy, areas=[str(row['area']) for row in archive_events], permanent=True)
         else:
             policy = dict(policy, areas=filter_event_areas(policy['areas'], State.player))

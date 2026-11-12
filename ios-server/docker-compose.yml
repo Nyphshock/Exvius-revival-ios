@@ -41,7 +41,7 @@ services:
       # 1 asks the game to upload its own error log (saved in server/client-reports/) for troubleshooting,
       # once per launch (tens of MB each). Leave it 0 otherwise.
       EXVIUS_CLIENT_REPORTS: "0"
-      # Weekly summon rotation (see source/server/gacha_rotation.py). Set to 0 to show every banner.
+      # Weekly summons follow replay history; all banners from story seasons a player has unlocked remain available.
       EXVIUS_SUMMON_ROTATION: "1"
       EXVIUS_ROTATION_TZ: America/New_York
       EXVIUS_ROTATION_DAY: "6"        # 0 = Monday ... 6 = Sunday
@@ -66,8 +66,8 @@ services:
       # MARQUEE_FLAG turns the home banner strip on; set it to "0" if the home screen misbehaves.
       EXVIUS_REPLAY_MARQUEE: "1"
       MARQUEE_FLAG: "1"
-      # The Vortex follows the summons: permanent dungeons, the events that launched with this week's sets,
-      # and EXVIUS_VORTEX_EXTRA undated recurring events. "0" opens every archived event at once.
+      # The Vortex includes all events from unlocked story seasons, plus permanent and recurring events.
+      # "0" opens every archived event at once.
       EXVIUS_VORTEX_ROTATION: "1"
       EXVIUS_VORTEX_EXTRA: "2"
       # Resource packs downloaded before the tutorial (the first battle needs them). "all" or "0" also work.

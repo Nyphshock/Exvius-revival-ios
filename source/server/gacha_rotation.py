@@ -4,7 +4,8 @@ Turned on with EXVIUS_SUMMON_ROTATION=1. When it is on, the summon screen shows:
 
   * every permanent summon (Standard, Rare, Premium 10+1, 5-star Guaranteed 10+1, Arena,
     EXVIUS, NV EXVIUS, 5+1 Ticket, Friend), always;
-  * this week's sets. A set is every banner that shares one release date in the archive, so a
+  * this week's sets. With historical replay, all banners from the player's unlocked story seasons
+    are also available. A set is every banner that shares one release date in the archive, so a
     featured banner arrives together with the step-up, ticket or select banners that launched
     beside it. Each week shows EXVIUS_ROTATION_SPECIAL sets that contain a step-up, ticket,
     select or box banner (default 1) and EXVIUS_ROTATION_FEATURED other sets (default 2).

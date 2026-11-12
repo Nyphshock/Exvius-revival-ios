@@ -8,12 +8,15 @@ with replay on becomes replay week 0 and shows what Global released from EXVIUS_
 
 2020-08-20 is Global's first Neo Vision banner (Cloud, FFVII Remake), the biggest jump in power the game had.
 
-Each real week shows:
+Each real week selects:
   * every banner set Global released in that week's slice of history (holiday sets excepted, see below);
   * the permanent summons, with their pools limited to units released by the end of the slice. NV EXVIUS
     stays hidden until the NV era (EXVIUS_REPLAY_NV_ERA, default 2020-08-20);
   * the Vortex events that launched with those sets (event_archive.weekly_events);
   * exchange shops without the units that have not come out yet (exvius_shop_catalogue).
+
+On the summon screen, story-season banners remain available after their opening mission is cleared,
+alongside the current replay week's sets.
 
 Holiday sets (gacha_rotation.HOLIDAYS) leave the timeline and run in the week before each real holiday and
 the holiday's own week. Each holiday shows the next original year that has not been shown (if it is less
