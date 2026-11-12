@@ -193,6 +193,58 @@ def banner_unlocked(player, banner, families=None):
     return _banner_unlocked(banner, families, unlocked_seasons(player))
 
 
+def featured_unit_ids(banner):
+    """The banner's headliners, from the community calendar and its featured pool tiers."""
+    ids = {str(unit_id) for unit_id in ((banner.get('community') or {}).get('unit_ids') or [])
+           if unit_id is not None and str(unit_id).strip() and str(unit_id) != '0'}
+    pool = banner.get('pool') or {}
+    if isinstance(pool, dict):
+        for tier in pool.get('tiers') or []:
+            if isinstance(tier, dict):
+                ids.update(str(unit_id) for unit_id in (tier.get('featured') or [])
+                           if unit_id is not None and str(unit_id).strip() and str(unit_id) != '0')
+    return frozenset(ids)
+
+
+def filter_redundant_featured(banners):
+    """Among comparable featured-unit lineups, keep the newest banner regardless of its offer.
+
+    On the same release date, the banner featuring more units wins. If the lineups and dates
+    are identical, the lowest banner id is the stable representative.
+    """
+    representatives = {}
+    for banner in banners:
+        units = featured_unit_ids(banner)
+        if not units:
+            continue
+        bid = str(banner['id'])
+        released = _released(banner) or date.min
+        current = representatives.get(units)
+        if (current is None or released > current[0]
+                or (released == current[0] and bid < current[1])):
+            representatives[units] = (released, bid)
+
+    by_unit = defaultdict(set)
+    for units in representatives:
+        for unit_id in units:
+            by_unit[unit_id].add(units)
+
+    suppressed = set()
+    for units, (released, _bid) in representatives.items():
+        related = set().union(*(by_unit[unit_id] for unit_id in units))
+        for other in related:
+            if other == units or not (other < units or units < other):
+                continue
+            other_released = representatives[other][0]
+            if other_released > released or (other_released == released and len(other) > len(units)):
+                suppressed.add(units)
+                break
+
+    keep_ids = {bid for units, (_released_on, bid) in representatives.items() if units not in suppressed}
+    keep_ids.update(str(banner['id']) for banner in banners if not featured_unit_ids(banner))
+    return [banner for banner in banners if str(banner['id']) in keep_ids]
+
+
 def _banner_unlocked(banner, families, unlocked):
     if (str(banner.get('id') or '') in families or banner.get('name') in PERMANENT_NAMES
             or banner.get('type') == 'friend'):
@@ -211,7 +263,7 @@ def filter_banners_for_story(player, banners):
 def rotation_banners_for_story(player, banners):
     """Keep rotation and held-ticket banners, plus every banner in unlocked replay seasons."""
     from gacha_rotation import enabled, rotation_ids
-    eligible = filter_banners_for_story(player, banners)
+    eligible = filter_redundant_featured(filter_banners_for_story(player, banners))
     if not enabled():
         return eligible
     by_id = {str(banner['id']): banner for banner in eligible}
@@ -230,6 +282,7 @@ def catalogue(banners):
     """Every non-permanent banner belongs to exactly one group; the permanent summons
     appear with every group. Uncertain dates stay under Standard. Collab banners are
     ordered by series, and seasons by release date."""
+    banners = filter_redundant_featured(banners)
     families = _standard_families()
     members = defaultdict(list)
     shared = []
@@ -240,8 +293,8 @@ def catalogue(banners):
         bid = str(banner['id'])
         if bid in aliases:
             continue
-        # A reused picture does not make two campaigns the same. Preserve reruns
-        # and distinct offers; collapse only identical campaign/offer records.
+        # A reused picture does not make two campaigns the same. Featured-lineup
+        # redundancies have already been filtered; collapse identical campaign/offer records here.
         offer = {key: banner.get(key) for key in ('cost', 'draws', 'steps', 'ticket_group_id',
                                                  'guarantee', 'secondary_offer', 'pool', 'reward_pool',
                                                  'selection', 'daily_limit', 'weekly_limit', 'purchase_limit',

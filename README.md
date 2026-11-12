@@ -341,6 +341,8 @@ The Vortex archive and summon banners are grouped by their earliest known Global
 
 Unlocks are cumulative: reaching a later checkpoint opens all earlier seasons. Collaboration banners and events are also included in their date-based season; their separate Collab filter remains. Stock permanent summons stay available. When a release date is missing, an existing season label is used if available; otherwise the item stays in its existing Standard, Collab, Permanent, or Other group.
 
+The summon list also hides redundant featured lineups: when one banner's featured units are a subset of another's (or identical), only the newer banner is kept, regardless of cost, steps or other offers. If they share a release date, the banner with more featured units wins.
+
 **Earned Lapis**
 
 The original game's Lapis income assumed you'd buy Lapis. These settings raise what you earn by playing (Shop purchases are never touched). With the defaults, a story mission's challenges pay about 250 Lapis, a full day of daily quests pays 3,250 Lapis, and every week brings a 10+1's worth of summon tickets.

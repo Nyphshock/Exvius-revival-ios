@@ -2,6 +2,10 @@
 
 Each entry is one update to this repo. To update: in your repo folder run `git pull`, then from `ios-server` run `docker compose build && docker compose up -d`. Your save isn't touched. Open the game twice afterwards so it picks up the new data.
 
+## 2026-11-12: Less-redundant summon banners
+
+- The summon list now removes banners whose featured units are repeated in another banner's lineup. When lineups are subsets or identical, the newest banner is kept regardless of its offer; if the dates match, the lineup with more featured units wins.
+
 ## 2026-11-11: Farplane, awakening and quest Gil fixes
 
 - The Farplane no longer plays its intro on every visit: two scene packs containing a copy of the intro are skipped.
