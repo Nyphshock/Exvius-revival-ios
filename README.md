@@ -406,6 +406,8 @@ Each successful clear of any quest (story, exploration, Vortex, events) gives ev
 
 **Explorations**
 
+When you successfully defeat the boss at the end of a main-story exploration, the server also grants the catalogued field-chest rewards associated with that exploration, even if you did not open those chests along the way. Their opened switches are saved, so replaying the exploration will not grant the rewards again. When you enter a town, its catalogued chests are granted once and their switches saved immediately, so opening them in the town afterward or entering again cannot pay them twice.
+
 | Setting | What it controls |
 | --- | --- |
 | `EXVIUS_FIELD_ENCOUNTERS` | `1` (default) gives explorations their random battles while you walk: the monsters the FFBE wiki lists for each exploration, in about the wiki's number of battles per zone, and then they run out as they did in the original game. 248 story, quest and event explorations are covered (`source/server/content/exploration_encounters.json`); the rest have no random battles. Each battle's drops are rolled from the enemies' own drop lists. `0` turns random battles off. |

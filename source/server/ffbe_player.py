@@ -817,6 +817,7 @@ def serve_switches(spec, reply_id=None):
     then never served -- every session re-popped every first-visit hint. A reply with no switch group is
     left exactly as it is, except the login replies publish the authoritative
     containers before the native client can reuse an earlier campaign's flags.
+    Town updates publish the same authoritative switches after town chests settle.
     """
     if not isinstance(spec, dict):
         return spec
@@ -840,7 +841,7 @@ def serve_switches(spec, reply_id=None):
     switch_groups = [key for key, rows in spec.items()
                      if isinstance(rows, list)
                      and any(isinstance(r, dict) and SWITCH_TYPE_FIELD in r for r in rows)]
-    if not switch_groups and wanted and reply_id in ('75fYdNxq', 'X07iYtp5'):
+    if not switch_groups and wanted and reply_id in ('75fYdNxq', 'X07iYtp5', 'G1hQM8Dr'):
         out = dict(spec)
         out['8J1R5PXG'] = [{SWITCH_TYPE_FIELD: stype, SWITCH_BITS_FIELD: bits}
                             for stype, bits in sorted(wanted.items())]

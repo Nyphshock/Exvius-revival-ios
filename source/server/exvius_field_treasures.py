@@ -60,6 +60,7 @@ def _mission_treasures(out, request):
     if (attempt.get('mid') != mid or attempt.get('status') != 'completed'
             or not attempt.get('normal_rewards_recorded')):
         return out
+    auto_collect = attempt.get('cleared') is True and _is_story_exploration(mid)
     # GL9 MissionResultRequest serializes opened-chest tuples by reward kind.
     # R1kg3EBA is retained for the earlier request form used by saved clients.
     reported = {entry for channel in (*CHEST_CHANNELS.values(), 'R1kg3EBA')
@@ -74,12 +75,14 @@ def _mission_treasures(out, request):
             continue
         if not missions and (row.get('town') or row.get('towns')):
             continue
-        if row['switch'] and str(row['switch']) not in opened:
-            continue
         entries = row['rewards'].split(',')
-        if not all(entry + ':' + str(row['switch']) in reported for entry in entries):
-            continue
         if any(int(entry.split(':')[0]) not in (*CHEST_CHANNELS, 30, 50, 51, 60) for entry in entries):
+            continue
+        was_opened = (not row['switch'] or str(row['switch']) in opened)
+        reported_all = all(entry + ':' + str(row['switch']) in reported for entry in entries)
+        auto_eligible = (auto_collect and mid in missions
+                         and not (row.get('town') or row.get('towns')))
+        if not (was_opened and reported_all) and not auto_eligible:
             continue
         if _credit(iid, row):
             attempt.setdefault('field_treasures', []).append(iid)
@@ -100,6 +103,13 @@ def _mission_treasures(out, request):
                 for channel, entries in display.items():
                     result[channel] = ','.join(entries)
     return out
+
+
+def _is_story_exploration(mid):
+    from player_state import is_main_story_mission, mission_row
+    mission = mission_row(mid)
+    return bool(mission and str(mission.get('Y4VoF8yu')) == '2'
+                and is_main_story_mission(mid))
 
 
 @lru_cache(maxsize=1)
@@ -135,23 +145,41 @@ def serve(spec, plaintext, reply_id=None):
 
 def _settle(out, req):
     for node in _rows(req, 'JcxS6A8N'):
+        town_id = str(node.get('Gh92V3Tx') or '')
+        _auto_collect_town_treasures(town_id)
         for iid in str(node.get('NiG2wL3A') or '').split(','):
             row = catalogue().get(iid)
             if row is None:
                 if iid:
                     _note('field treasure: missing reward definition for ' + iid)
                 continue
-            towns = set(map(str, row.get('towns', [])))
-            if row.get('town'):
-                towns = {str(row['town'])}
+            towns = _town_ids(row)
             if not towns and (row.get('mission') or row.get('missions')):
                 continue
-            if towns and str(node.get('Gh92V3Tx')) not in towns:
+            if towns and town_id not in towns:
                 _note('field treasure: town mismatch for ' + iid)
                 continue
             if not towns:
                 from exvius_actions import _mst
-                if str(node.get('Gh92V3Tx')) not in _mst('F_TOWN_MST.ndjson', 'Gh92V3Tx'):
+                if town_id not in _mst('F_TOWN_MST.ndjson', 'Gh92V3Tx'):
                     continue
             _credit(iid, row)
     return _mission_treasures(out, req)
+
+
+def _town_ids(row):
+    towns = set(map(str, row.get('towns', [])))
+    if row.get('town'):
+        towns.add(str(row['town']))
+    return towns
+
+
+def _auto_collect_town_treasures(town_id):
+    if not town_id:
+        return
+    collected = [
+        iid for iid, row in catalogue().items()
+        if town_id in _town_ids(row) and _credit(iid, row)
+    ]
+    if collected:
+        print(f'field treasure: first town entry {town_id} credited {len(collected)} chest(s)', flush=True)
