@@ -526,7 +526,7 @@ def _gacha_detail_row(b, art, detail_id, cost, draws, exe_type=None, img_btn=Non
         det['h6Tg0oGd'] = str(b['box_id'])
     # The PAY detail scene's FIELD composite (`gacha_pay_field_rect`): the poses come from
     # `GachaDetailMst.t6aQ1voV` (`0:<unitId>`,...), the display names from `Rw4fS2m1` (`0:<name>`,...), and the
-    # per-unit motion from `BUW0I4JL` (one `@`-segment per unit; opcode `0` = pose the unit). An EMPTY
+    # per-unit motion from `BUW0I4JL` (one `@`-segment per unit). An EMPTY
     # `t6aQ1voV` makes `GachaPayDetailScene::setNewUILayout` (0x214a17c) return early -> no units AND no monster.
     # `gacha_pay_field_research.md`; bg/monster fall back to 100022 (Earth Shrine) / 3110010 (Ochu).
     units = gacha_field_units(b)
@@ -535,7 +535,7 @@ def _gacha_detail_row(b, art, detail_id, cost, draws, exe_type=None, img_btn=Non
         names = [f"{i}:{unit_name(u)}" for i, u in enumerate(units) if unit_name(u)]
         if names:
             det["Rw4fS2m1"] = ",".join(names)
-        det["BUW0I4JL"] = "@".join("1,5" for _ in units)   # opcode 1 = NV/brave-shift, 5 = the LB/skill pair
+        det["BUW0I4JL"] = "@".join("1" for _ in units)     # one motion per unit; adding 5 plays a second clip
     return det
 def _gacha_banner_detail_string(banner: str) -> str:
     """`GachaDetailMst.bannerInfo` (`4yT7FUqj`, +0xc0): the `index:file` form `parseSetBannerInfo` requires.
