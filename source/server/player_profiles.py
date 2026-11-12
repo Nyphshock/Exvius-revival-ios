@@ -199,6 +199,21 @@ class PlayerProfileManager:
                 or not handle_name.isprintable()):
             raise UnregisteredClientError(
                 f"CreateUserRequest from {address} did not contain a valid player name")
+        
+        # Check if this address was already auto-registered
+        existing_player_id = self._clients.get(address)
+        if existing_player_id:
+            # Update the existing profile with the player name
+            profile = self._profiles.get(existing_player_id)
+            if profile is None:
+                profile = self._load_profile(existing_player_id)
+            profile.player.data.setdefault("identity", {})["handle_name"] = handle_name.strip()
+            profile.player.dirty = True
+            self._profiles[existing_player_id] = profile
+            print(f"profiles: {address} named their profile {handle_name.strip()!r} (player {existing_player_id})", flush=True)
+            return existing_player_id
+        
+        # New registration (address not in map)
         player_id = self._next_player_id()
         profile = self._load_profile(player_id)
         profile.player.data.setdefault("identity", {})["handle_name"] = handle_name.strip()
@@ -212,6 +227,21 @@ class PlayerProfileManager:
             raise
         self._profiles[player_id] = profile
         print(f"profiles: registered {address} as player {player_id} ({handle_name.strip()!r})", flush=True)
+        return player_id
+
+    def _auto_register_client(self, address: str) -> str:
+        """Auto-register a new device without requiring a name yet. The name will be set when the game sends CreateUserRequest."""
+        player_id = self._next_player_id()
+        profile = self._load_profile(player_id)
+
+        self._clients[address] = player_id
+        try:
+            self._save_client_map()
+        except ProfileMapError:
+            del self._clients[address]
+            raise
+        self._profiles[player_id] = profile
+        print(f"profiles: auto-registered {address} as player {player_id} (awaiting player name)", flush=True)
         return player_id
 
     @contextmanager
@@ -228,8 +258,10 @@ class PlayerProfileManager:
             player_id = self._clients.get(address)
         if player_id is None:
             if registration_name is None:
-                raise UnregisteredClientError(f"no player profile is assigned to {address}")
-            player_id = self._register_client(address, registration_name)
+                # Auto-register unknown devices with a new player ID without requiring a name yet
+                player_id = self._auto_register_client(address)
+            else:
+                player_id = self._register_client(address, registration_name)
 
         previous_id = st.PROFILE_ID or self._default_id
         previous_runtime_id = st.PROFILE_ID

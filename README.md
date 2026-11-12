@@ -181,6 +181,18 @@ If you use custom Tailscale access rules, the phone must be allowed to reach `ff
 4. Open **Settings → General → About → Certificate Trust Settings** and turn on **Exvius Offline Root**. This step is easy to miss, and the game won't connect without it.
 5. Test it in Safari: open `https://v900-lapis.gumi.sg/__exvius/hello`. A page saying **"Reachable. You can open the game."**, with no warning, means DNS and the certificate both work.
 
+### 6b. Android: trust the certificate (optional)
+
+If you also want to run the game on Android:
+
+1. In the Tailscale app on Android, make sure you're connected.
+2. In a **browser**, open `http://100.x.y.z/ca.pem` to download the certificate.
+3. Open **Settings → Security → Encryption and credentials → Install a certificate**. Tap **CA Certificate**.
+4. Select the downloaded `exvius-offline-root.pem` file.
+5. Test it in the browser: open `https://v900-lapis.gumi.sg/__exvius/hello`. A page saying **"Reachable. You can open the game."**, with no warning, means DNS and the certificate both work.
+
+The certificate used on Android is the same one as iOS, so both devices can play on the same server.
+
 ### 7. Play
 
 1. Open the game. The first launch downloads the game's data from your server; keep the app open until it finishes.
@@ -281,8 +293,42 @@ The server also keeps a record of each request it received, for three days and a
 
 ### Multiple players on the same Tailscale server
 
-The server can keep a separate save for each Tailscale device. Create
-`FFBE_DIR/server/state/profiles.json` on the host:
+The server automatically assigns each device its own separate save with a unique player ID. When a new device connects for the first time, it's instantly recognized and gets its own profile—no manual configuration needed.
+
+#### How it works
+
+1. **First connection:** A new device connects → server auto-assigns a unique player ID
+2. **In the game:** Choose "Create New Player" and enter your name
+3. **Done:** Your progress is now separate from all other devices
+
+#### Example: Three players
+
+- Your iPhone connects → automatically gets player ID `100000002` → enters the game with a blank profile
+- Your Android connects → automatically gets player ID `100000003` → separate save
+- Your friend's iPad connects → automatically gets player ID `100000004` → another separate save
+
+All without editing any files. Each device has completely separate progress: lapis, units, quests, levels—everything.
+
+#### Optional: Sharing a profile between your devices
+
+If you want the same save on multiple devices (e.g., play on iPhone, continue on Android), edit `FFBE_DIR/server/state/profiles.json`:
+
+```json
+{
+  "version": 1,
+  "default_player_id": "100000001",
+  "clients": {
+    "100.64.123.45": "100000002",
+    "100.65.200.10": "100000002"
+  }
+}
+```
+
+Both IPs now point to the same player ID, so they load and save the same profile.
+
+#### Manual configuration (for advanced users)
+
+If you need to set up specific mappings before the first login, create `FFBE_DIR/server/state/profiles.json`:
 
 ```json
 {
@@ -294,14 +340,8 @@ The server can keep a separate save for each Tailscale device. Create
 }
 ```
 
-Replace the example address with the existing owner's Tailscale IP from the Tailscale admin console.
-The default ID must match the existing save's `identity.user_id`, so that save stays with its current
-owner. When another device first registers in the game and submits its chosen player name, the server
-creates a fresh profile under `FFBE_DIR/server/state/profiles/`, assigns it a new numeric player ID, and
-adds that device's Tailscale IP to `clients`. Further devices remain denied until they register; an
-unmapped IP can only create a profile through the game's `CreateUserRequest`. Multiple device addresses
-can point to the same ID to share a profile. Without this file, the server continues to use its existing
-single save.
+- `default_player_id`: must match your existing save's `identity.user_id`
+- `clients`: map of Tailscale IPs to player IDs
 
 This separates player progress and the battle data carried between requests. It does not yet turn
 friend requests into interactions between real server profiles; that requires a shared friend directory

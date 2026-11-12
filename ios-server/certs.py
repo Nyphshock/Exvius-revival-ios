@@ -149,4 +149,5 @@ def ensure(folder: Path) -> dict:
     _profile(folder, ca_cert)
     return {'leaf_chain': folder / 'leaf-chain.pem', 'leaf_key': folder / 'leaf.key',
             'profile': folder / 'exvius-offline.mobileconfig', 'ca_der': folder / 'ca.crt',
+            'ca_pem': folder / 'ca.pem',
             'leaf_expires': leaf.not_valid_after_utc}

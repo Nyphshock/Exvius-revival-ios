@@ -120,7 +120,7 @@ def start_engine():
 # --------------------------------------------------------------------------------------------------
 # HTTP(S)
 # --------------------------------------------------------------------------------------------------
-def make_handler(capture_server, profile: bytes, ca_der: bytes):
+def make_handler(capture_server, profile: bytes, ca_der: bytes, ca_pem: bytes):
     base = capture_server.Handler
 
     class Handler(base):
@@ -140,6 +140,8 @@ def make_handler(capture_server, profile: bytes, ca_der: bytes):
                 return self._send_static(profile, 'application/x-apple-aspen-config', 'exvius-offline.mobileconfig')
             if path in ('/ca.crt', '/__exvius/ca.crt'):
                 return self._send_static(ca_der, 'application/x-x509-ca-cert', 'exvius-offline-root.crt')
+            if path in ('/ca.pem', '/__exvius/ca.pem'):
+                return self._send_static(ca_pem, 'application/x-x509-ca-cert', 'exvius-offline-root.pem')
             if path == '/__exvius/hello':
                 # Open https://v900-lapis.gumi.sg/__exvius/hello on the phone: if this page loads with no
                 # warning, DNS and the certificate are both set up correctly.
@@ -373,7 +375,8 @@ def main() -> int:
     tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     tls.minimum_version = ssl.TLSVersion.TLSv1_2
     tls.load_cert_chain(paths['leaf_chain'], paths['leaf_key'])
-    handler = make_handler(capture_server, paths['profile'].read_bytes(), paths['ca_der'].read_bytes())
+    handler = make_handler(capture_server, paths['profile'].read_bytes(), paths['ca_der'].read_bytes(), 
+                          paths['ca_pem'].read_bytes())
     serve(int(os.environ.get('FFBE_HTTPS_PORT', '443')), handler, tls)
     serve(int(os.environ.get('FFBE_HTTP_PORT', '80')), handler)
     serve_dns()
@@ -381,6 +384,7 @@ def main() -> int:
     ip = tailscale_address()
     where = ip or '<this node\'s Tailscale IP>'
     log(f'ready. Certificate profile for the phone: http://{where}/ca.mobileconfig')
+    log(f'Android certificate: http://{where}/ca.pem')
     log('leaf certificate valid until ' + paths['leaf_expires'].strftime('%Y-%m-%d'))
     from gacha_rotation import enabled, week
     if enabled():
