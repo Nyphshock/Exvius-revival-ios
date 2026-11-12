@@ -57,43 +57,62 @@ def mission_restart(spec, req):
     return _refresh(spec)
 
 
+def _refuse_awakening(spec, why):
+    import client_message
+    client_message.set(f"The awakening couldn't be completed ({why}). Nothing was used.")
+    return spec
+
+
 def unit_class_up(spec, req):
     """UnitClassUpRequest (awakening): group `sWc7EH69`, `og2GHy49` = the base unit. F_UNIT_CLASS_UP_MST
     names the next rarity (`t74crqAL`), its gil (`7UR4J2SE`) and materials (`KCk8u0am`). The reply is
     UnitClassUpResponse on the same tag (UserUnitClassUpResult: og2GHy49 unit, 5u7VYNEX new unit,
     KCk8u0am materials, WbGYcN17/02CI3bpE element info, p9Xj4Anc all-kigen flag)."""
-    node = _node(req, "sWc7EH69")
-    iid = str(node.get("og2GHy49") or "") if node else ""
+    node = _node(req, "sWc7EH69") or {}
+    iid = str(node.get("og2GHy49") or "")
     unit = next((u for u in State.player.data["roster"] if str(u["instance_id"]) == iid), None)
     if unit is None or State.player.mode == 'frozen':
         _note(f"unit-class-up: unit {iid or '?'} not in the roster")
-        return spec
+        return _refuse_awakening(spec, "the unit isn't in your unit list")
     step = _mst("F_UNIT_CLASS_UP_MST.ndjson", "3HriTp6B").get(str(unit["master_id"]))
     if not step:
         _note(f"unit-class-up: no F_UNIT_CLASS_UP_MST row for {unit['master_id']}")
-        return spec
+        return _refuse_awakening(spec, "this unit has no further awakening")
     materials = str(step.get("KCk8u0am") or "")
     gil = int(step.get("7UR4J2SE") or 0)
     rows = [m.split(":") for m in materials.split(",") if m.count(":") == 2]
-    if any(State.player.item_count(int(k), i) < int(c) for k, i, c in rows) or \
+    from player_state import unit_mst
+    item = str((_mst("F_DEFINE_MST.ndjson", "AK8Nn7ta").get("CLASS_UP_PRISM_ALL_ITEM_ID") or {})
+               .get("YjIUDJ97") or "")
+    takes_one = (bool(item) and (unit_mst(unit["master_id"]) or {}).get("9fW0TePj") == "6"
+                 and len(rows) == 1 and rows[0][0] == "20" and rows[0][2] == "1")
+    omniprism = str(node.get("p9Xj4Anc") or "0") == "1"
+    if omniprism and not takes_one:
+        _note(f"unit-class-up: Omniprism asked for {unit['master_id']}, which does not take one")
+        return _refuse_awakening(spec, "the Omniprism can't be used for this awakening")
+    if ("p9Xj4Anc" not in node and takes_one
+            and State.player.item_count(20, rows[0][1]) < 1 and State.player.item_count(20, item) >= 1):
+        omniprism = True
+    paid = [["20", item, "1"]] if omniprism else rows
+    if any(State.player.item_count(int(k), i) < int(c) for k, i, c in paid) or \
             int(State.player.currencies.get("gil", 0)) < gil:
         _note(f"unit-class-up: {unit['master_id']} lacks materials or gil; not awakened")
-        return spec
-    for k, i, c in rows:
+        return _refuse_awakening(spec, "not enough materials or gil")
+    for k, i, c in paid:
         State.player.spend_item(int(k), i, int(c))
     State.player.spend_currency("gil", gil)
     before = unit["master_id"]
     unit["master_id"] = str(step["t74crqAL"])
     unit = State.player.renew_unit_instance(iid)
-    from player_state import unit_mst
     destination = unit_mst(unit['master_id']) or {}
     State.player.record_archive({'TOTAL_UNIT_CLASS_UP': 1, 'TOTAL_UNIT_RARE7_CLASS_UP':
                                  int(destination.get('9fW0TePj') == '7' and destination.get('JPW8Vs40') == '0')})
     State.player.dirty = True
-    print(f"unit: awakened {iid} {before} -> {unit['master_id']} for {gil} gil + {materials}", flush=True)
+    spent = ",".join(":".join(row) for row in paid)
+    print(f"unit: awakened {iid} {before} -> {unit['master_id']} for {gil} gil + {spent}", flush=True)
     out = _refresh(spec)
     out["sWc7EH69"] = [{"og2GHy49": iid, "5u7VYNEX": unit['instance_id'], "KCk8u0am": materials, "WbGYcN17": "",
-                        "02CI3bpE": "", "p9Xj4Anc": "0"}]
+                        "02CI3bpE": "", "p9Xj4Anc": "1" if omniprism else "0"}]
     return out
 
 

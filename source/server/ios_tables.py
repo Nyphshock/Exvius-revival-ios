@@ -54,6 +54,12 @@ freezes or closes the iPhone app on the quest screen. `F_QUEST_MST` is served wi
 with his menu worked out at login; `F_RESOURCE_MAP_VERSION_MST_LOCALIZE` gives it a new version whenever the list
 changes, `F_RESOURCE_MAP_CHECKSUM_MST` the size of the pack served (else the phone downloads it on every visit),
 and this module serves it.
+
+10. THE FARPLANE INTRO ON EVERY VISIT (2026-11-11). `F_MAP_EXT_RESOURCE_MST` is served without the two Farplane
+scene packs the content fill replaced with a copy of the intro (`STAND_IN_SCENES`, `EXVIUS_FARPLANE_SCENES`).
+
+11. MISSING CONVERT TABLE (2026-11-11). `F_SACRIFICE_MST` is advertised at a new version so the phone downloads
+the table it needs for Convert (`EXVIUS_REFETCH_TABLES`).
 """
 from __future__ import annotations
 
@@ -88,6 +94,12 @@ MAP_CHECKSUM = ("F_RESOURCE_MAP_CHECKSUM_MST", "2RZ4uDoK", "29Rd7ra0")
 SELECT_UNIT = ("F_GACHA_SELECT_UNIT_MST", "qRb73JSY", "H9Jye1j3")
 # Vision Card search reading (`cnLF6Cz1`) is Japanese for many cards in the shipped table.
 VISION_CARD = ("F_VISION_CARD_MST", "G9K8kLXz", "6MS9LGhA")
+# Map packs loaded by towns and quests (`F_MAP_EXT_RESOURCE_MST`).
+MAP_EXT = ("F_MAP_EXT_RESOURCE_MST", "En90A5BC", "9dA6bguS")
+# The content fill replaced these Farplane scenes with a copy of the intro, which sends the player back to Mitra.
+STAND_IN_SCENES = {"390001201", "390001213"}
+# F_SACRIFICE_MST may be advertised without a table on the phone; bumping its version makes it fetch/build the index.
+REFETCH = {"F_SACRIFICE_MST": "w5JFGPh3"}
 URL_KEY_FIELD = "gu8McTA6"
 # The host the Drop Rates page is opened on. NOT v900 (the notice host): `WebViewCommon::showWebView`
 # (GL 0x258bbf8) skips the page's posted fields (`gacha_id`) when the address contains the game setting
@@ -257,6 +269,8 @@ def table_bump(spec, *roots) -> int:
         return 1000 + zlib.crc32(",".join(extra).encode()) % 1000 if extra else 0
     if spec == VISION_CARD:
         return 1000 + zlib.crc32(b"vision-search-english-v1") % 1000 if english_search() else 0
+    if spec == MAP_EXT:
+        return 1000 if farplane_scenes() else 1001
     if spec == AREA:
         import vortex_order
         order = vortex_order.priorities()
@@ -269,9 +283,22 @@ def version_bumps() -> dict[str, int]:
     import ios_texts
     out = {RESOURCE[0]: version_bump(), ios_texts.INDEX[0]: ios_texts.index_bump()}
     for spec in (RESOURCE_VERSION, RESOURCE_MAP_VERSION, RESOURCE_CHECKSUM, QUEST, URL, CHALLENGE, MISSION, UNIT, AREA,
-                 MAP_CHECKSUM, SELECT_UNIT, VISION_CARD):
+                 MAP_CHECKSUM, SELECT_UNIT, VISION_CARD, MAP_EXT):
         out[spec[0]] = table_bump(spec)
+    if refetch_tables():
+        for name in REFETCH:
+            out[name] = out.get(name, 0) + 1000
     return {name: bump for name, bump in out.items() if bump}
+
+
+def farplane_scenes() -> bool:
+    """EXVIUS_FARPLANE_SCENES (default on; 0 = off): omit the Farplane stand-in scene packs."""
+    return os.environ.get("EXVIUS_FARPLANE_SCENES", "1").strip().lower() not in ("0", "off", "false", "no")
+
+
+def refetch_tables() -> bool:
+    """EXVIUS_REFETCH_TABLES (default on; 0 = off): advertise selected tables at new versions."""
+    return os.environ.get("EXVIUS_REFETCH_TABLES", "1").strip().lower() not in ("0", "off", "false", "no")
 
 
 def _path(token: str):
@@ -288,7 +315,7 @@ def _which(rel: str):
     if version_bump() and _path(RESOURCE[1]).search(rel):
         return RESOURCE
     for spec in (RESOURCE_VERSION, RESOURCE_MAP_VERSION, RESOURCE_CHECKSUM, QUEST, URL, CHALLENGE, MISSION, UNIT, AREA,
-                 MAP_CHECKSUM, SELECT_UNIT, VISION_CARD):
+                 MAP_CHECKSUM, SELECT_UNIT, VISION_CARD, MAP_EXT):
         if _path(spec[1]).search(rel) and table_bump(spec):
             return spec
     return None
@@ -424,6 +451,22 @@ def patch_vision_search(raw: bytes) -> tuple[bytes, int]:
     return ("\n".join(out) + "\n").encode("ascii"), changed
 
 
+def patch_map_ext(raw: bytes) -> tuple[bytes, int]:
+    """Remove Farplane stand-in scene ids; an empty row list is never loaded by the client."""
+    out, changed = [], 0
+    for line, row, double in _rows(raw, MAP_EXT[2]):
+        packs = [pack for pack in str(row.get("Y4PER0gB") or "").split(",") if pack]
+        kept = [pack for pack in packs if pack not in STAND_IN_SCENES]
+        if len(kept) != len(packs):
+            row = dict(row, Y4PER0gB=",".join(kept))
+            if not kept:
+                row["a3u6d1re"] = ""
+            line = _encrypt(MAP_EXT[2], row, double)
+            changed += 1
+        out.append(line)
+    return ("\n".join(out) + "\n").encode("ascii"), changed
+
+
 def patch_select_units(raw: bytes) -> tuple[bytes, int]:
     """`F_GACHA_SELECT_UNIT_MST` with the limited and collab 5★ units added (exvius_gacha_select.extra_unit_rows)."""
     import exvius_gacha_select
@@ -554,6 +597,11 @@ def serve(rel: str, *roots: str | None) -> tuple[bytes | None, str | None]:
         if spec == VISION_CARD:
             data, changed = patch_vision_search(open(src, "rb").read())
             return data, f"{os.path.basename(src)}, {changed} Vision Card search name(s) set to English"
+        if spec == MAP_EXT:
+            if not farplane_scenes():
+                return open(src, "rb").read(), f"{os.path.basename(src)}, shipped rows (EXVIUS_FARPLANE_SCENES=0)"
+            data, changed = patch_map_ext(open(src, "rb").read())
+            return data, f"{os.path.basename(src)}, {changed} Farplane stand-in scene row(s) left out"
         if spec == SELECT_UNIT:
             data, changed = patch_select_units(open(src, "rb").read())
             return data, f"{os.path.basename(src)}, {changed} limited/collab unit(s) added to the 5★ Select list"

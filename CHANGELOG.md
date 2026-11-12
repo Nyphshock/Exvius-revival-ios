@@ -2,6 +2,13 @@
 
 Each entry is one update to this repo. To update: in your repo folder run `git pull`, then from `ios-server` run `docker compose build && docker compose up -d`. Your save isn't touched. Open the game twice afterwards so it picks up the new data.
 
+## 2026-11-11: Farplane, awakening and quest Gil fixes
+
+- The Farplane no longer plays its intro on every visit: two scene packs containing a copy of the intro are skipped.
+- The Convert-to-Prism/Fragments screen now downloads the missing `F_SACRIFICE_MST` table and builds its index. Open the game twice after updating.
+- Neo Vision awakening no longer requires max level or full Super Trust mastery, matching Global's Version 7.0.0 rules. A refused awakening now shows a message instead of opening a broken animation, and 6★ units can use an Omniprism to awaken to 7★.
+- Quests now pay their listed clear Gil and include it on the results screen; the Chamber of Riches no longer pays zero.
+
 ## 2026-11-11: Missed rewards, Chamber drops, search and summons
 
 - First-clear rewards for already-cleared quests with no payment record can now be sent by mail, after the existing one-time back-pay. Units and recipes already owned are excluded; `EXVIUS_FIRST_CLEAR_MISSED=preview` logs the proposed rewards without mailing them.

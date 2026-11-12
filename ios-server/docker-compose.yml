@@ -72,6 +72,10 @@ services:
       EXVIUS_VORTEX_EXTRA: "2"
       # Resource packs downloaded before the tutorial (the first battle needs them). "all" or "0" also work.
       EXVIUS_EARLY_RESOURCES: "resources_common.cpk,resources.cpk"
+      # Skip two Farplane scene packs that contain a duplicate intro; "0" serves the shipped scene table.
+      EXVIUS_FARPLANE_SCENES: "1"
+      # Make the phone refetch the Convert-to-Prism/Fragments table. Open the game twice after changing this.
+      EXVIUS_REFETCH_TABLES: "1"
       # Sound banks for the iPhone: "1" removes the Android banks' HCA cipher, "0" serves them as shipped.
       EXVIUS_IOS_HCA_PLAIN: "1"
       # Change this to any new value to make the phone download every sound bank again.
@@ -97,6 +101,7 @@ services:
       EXVIUS_WEEKLY_GIFT: "23:50:10,23:70:1"   # mailed each week: 10 Rare Summon Tickets + a Guaranteed Ticket; "" = off
       EXVIUS_FIRST_CLEAR: "1"             # pay each quest's first-clear reward once (source/server/first_clear.py); 0 = off
       EXVIUS_FIRST_CLEAR_BACKPAY: "1"     # one mail with the first-clear rewards of quests cleared before that; 0 = off
+      EXVIUS_MISSION_GIL: "1"             # pay each quest's listed clear Gil and show it on the result screen; 0 = off
       EXVIUS_EVENT_CURRENCY_RUNS: "30"    # event currency drops x multiplier: the event's gear/materia/units in ~30 top-quest runs; 0 = Global's amounts
       EXVIUS_WIKI_DROP_RATE: "30"        # % chance for enemy drops only the FFBE wiki lists (Global); 0 = leave them out
       # Trust from clearing quests (source/server/quest_trust.py). Japan's rule: each of your party's units has a

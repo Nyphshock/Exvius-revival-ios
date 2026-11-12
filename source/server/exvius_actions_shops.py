@@ -237,6 +237,9 @@ def _archive_rows():
     return State.player.archive_rows()
 
 
+AWAKENINGS = frozenset({"unit_nv_class_up", "unit_nvp_class_up", "unit_ex_class_up"})
+
+
 def _action(fn):
     @wraps(fn)
     def handle(spec, req):
@@ -256,6 +259,9 @@ def _action(fn):
                 out.pop(tag, None)
             if "WSH38iMI" in req:
                 out["h5XGny0N"] = deepcopy(list(_feature("gift").get("receipts", {}).values()))
+            if fn.__name__ in AWAKENINGS:
+                import client_message
+                client_message.set(f"The awakening couldn't be completed ({exc}). Nothing was used.")
             return out
         except Exception:
             State.player.data, State.player.dirty = before, dirty
@@ -912,7 +918,7 @@ def unit_use_point(spec, req):
 
 
 def _awaken_unit(spec, req, plus):
-    from player_state import unit_mst, max_level, limit_burst
+    from player_state import unit_mst, limit_burst
     node = _node(req, '6U5w20zk') or {}
     unit = _unit(str(node.get('og2GHy49', '')))
     old = unit_mst(unit['master_id']) or {}
@@ -922,12 +928,7 @@ def _awaken_unit(spec, req, plus):
     _require(target and int(target.get('JPW8Vs40') or 0) > 0, 'destination is not Neo Vision')
     _require(bool(int(old.get('JPW8Vs40') or 0)) == plus, 'wrong awakening type')
     if not plus:
-        _require(int(unit['level']) >= max_level(unit['master_id']), 'unit must reach its maximum level')
         _require(int(old.get('9fW0TePj') or 0) == 7, 'NV awakening requires a 7-star unit')
-        trust, _ = State.player._unit_trust_info(unit, 1)
-        points = list(unit.get('affinity_points') or []) + ['', '']
-        _require(trust and str(points[1]).isdigit() and int(points[1]) >= trust[3],
-                 'NV awakening requires full super trust mastery')
     costs, gil = _awakening_cost(node, step)
     _pay(costs, gil)
     level = int(unit['level'])

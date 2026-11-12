@@ -203,6 +203,8 @@ PIPELINE: tuple = (
     # Event currency on every clear (event_currency.py): the battle drops Global's exchange events paid.
     Step("pay_event_currency", lambda c: __import__("event_currency").pay(c.spec, c.mid, c.plaintext),
          "state", "State.player.inventory", "an exchange event's currency, paid on each clear and listed"),
+    Step("pay_mission_gil", lambda c: __import__("mission_gil").pay(c.spec, c.mid, c.plaintext),
+         "state", "State.player.currencies", "the quest's clear Gil, paid on each clear and shown"),
     Step("grant_cleared_mission", lambda c: grant_cleared_mission(c.spec, c.mid, c.plaintext),
          "state", "State.player.switches", "the completed mission grants its own open switch"),
     # Story units join once their story point is cleared (story_units.py); a save already past it gets
@@ -451,6 +453,8 @@ PIPELINE_EDGES: tuple = (
          "a first clear is judged before this mission joins the cleared list"),
     Edge("pay_first_clear", "serve_diamonds", "State.player",
          "first-clear Lapis is part of the balance the diamond group reports"),
+    Edge("pay_mission_gil", "serve_diamonds", "State.player.currencies",
+         "mission clear Gil is part of the balance the team-currency group reports"),
     Edge("grant_cleared_mission", "serve_switches", "State.player.switches",
          "a mission's own open switch is granted here and the container is rebuilt from state after"),
     Edge("grant_cleared_mission", "grant_story_units", "State.player.progress.cleared_missions",
