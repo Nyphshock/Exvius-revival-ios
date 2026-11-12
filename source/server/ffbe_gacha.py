@@ -135,19 +135,19 @@ def missing_gacha_names(banners: list) -> dict:
             if str(b["id"]) not in _GACHA_TEXT_IDS or b.get('name_override')}
 def gacha_field_units(banner: dict) -> list:
     """The unit ids the PAY detail scene poses on its field (`GachaDetailMst.t6aQ1voV`). The community rows
-    carry the wiki's featured `unit_ids`; otherwise the pool's `featured` units. Empty -> no composite
-    (`gacha_pay_field_research.md`: an empty `t6aQ1voV` suppresses the unit poses AND the monster).
-
-    **ONE unit only.** `BUW0I4JL` carries one motion segment per unit and opcode `0` queues that unit's CG
-    (cgs type 1); with several units the scene queues several CGs and cycles through them on screen — the
-    live "flipping fast" plus a per-unit loading screen. One unit -> one pose, one load."""
+    carry the wiki's featured `unit_ids`; otherwise the pool's `featured` units. The client cycles through
+    those featured units. For banners without featured units, keep a single representative from the pool
+    rather than loading every possible unit. Empty -> no composite (`gacha_pay_field_research.md`: an empty
+    `t6aQ1voV` suppresses the unit poses AND the monster)."""
     ids = [str(u) for u in (banner.get('preview_units') or
                             ((banner.get("community") or {}).get("unit_ids")) or [])]
+    has_lineup = bool(ids)
     if not ids:
         pool = banner.get("pool")
         if isinstance(pool, dict):
             for t in pool.get("tiers") or []:
                 ids += [str(u) for u in (t.get("featured") or [])]
+            has_lineup = bool(ids)
             if not ids:
                 # General ticket/reward banners have no featured rate boost,
                 # but their real reward units can still populate the preview.
@@ -163,7 +163,8 @@ def gacha_field_units(banner: dict) -> list:
         rows = _load_ndjson('F_GACHA_SELECT_UNIT_MST.ndjson')
         rows = rows.get('__rows__') or list(rows.values())
         ids += [str(r['3HriTp6B']) for r in rows[:1] if isinstance(r, dict) and r.get('3HriTp6B')]
-    return ids[:1]
+    unique = list(dict.fromkeys(ids))
+    return unique if has_lineup else unique[:1]
 _CAMPAIGN_DOC = None          # lazily loaded `gacha_campaigns.json`
 _CAMPAIGN_LOGGED = [False]    # the selection is announced once, not on every reply
 _ONLY_LOGGED = [False]        # ditto for the single-banner mode

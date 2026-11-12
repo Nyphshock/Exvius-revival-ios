@@ -13,6 +13,8 @@ _DOCUMENT = None
 
 
 _HISTORY = None
+_EVENT_NAMES_BY_AREA = None
+_VORTEX_TABS = None
 REPLAY_LOOKBACK_DAYS = 14   # first replay week: events still running when the replay starts
 
 
@@ -53,6 +55,34 @@ def events():
 
 def area_ids():
     return [str(event['area']) for event in events()]
+
+
+def event_name(area):
+    """Return the archived display name for an area id."""
+    global _EVENT_NAMES_BY_AREA
+    if _EVENT_NAMES_BY_AREA is None:
+        _EVENT_NAMES_BY_AREA = {
+            str(row['area']): str(row.get('name') or '')
+            for row in events()
+        }
+    return _EVENT_NAMES_BY_AREA.get(str(area), '')
+
+
+def vortex_tab(name, override=None):
+    """Return a generated gate row's 1-based Vortex tab from its event name."""
+    if override is not None:
+        return str(override)
+    global _VORTEX_TABS
+    if _VORTEX_TABS is None:
+        data = json.loads(
+            Path(__file__).with_name('event_vortex_tabs.json').read_text(encoding='utf-8')
+        )
+        _VORTEX_TABS = {
+            ' '.join(str(event_name).split()).casefold(): str(category['tab'])
+            for category in data['categories'].values()
+            for event_name in category['events'] + category.get('aliases', [])
+        }
+    return _VORTEX_TABS.get(' '.join(str(name).split()).casefold(), '1')
 
 
 def event_season(row):

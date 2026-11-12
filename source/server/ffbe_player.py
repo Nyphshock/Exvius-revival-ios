@@ -3047,8 +3047,9 @@ def serve_event_gate(spec, reply_id):
     AreaMapManager::drawDungeon asks the same list per tile) -- the survival family's own lesson, and
     docs/notes/chamber_battle_authoring.md section 6 names this as the step a battle-authoring run does
     NOT cover. DERIVED: the area id is the env word, and its dungeon + first mission are read from the
-    shipped tables. AUTHORED: the window, the tab (qnUhs32P, 1-BASED, 1 = Event), the 1/2 selector, and
-    the art (reused from a shipped row so the client can resolve it -- see the config's collision note).
+    shipped tables. AUTHORED: the window, the wiki-category tab (qnUhs32P, 1-BASED; EVENT_GATE_TAB can
+    override it), the 1/2 selector, and the art (reused from a shipped row so the client can resolve it --
+    see the config's collision note).
 
     APPENDED, never replaced: the list is replace-on-read, so this rides only the carriers that already
     serve it (EVENT_GATE_CARRIERS), and an area already present in the carrier's rows is left alone.
@@ -3062,7 +3063,7 @@ def serve_event_gate(spec, reply_id):
         archive_events = None
         from exvius_events import policy_path
         saved_policy = policy_path(DATA_ROOT)
-        from event_archive import filter_event_areas, vortex_events
+        from event_archive import event_name, filter_event_areas, vortex_events, vortex_tab
         if (os.environ.get('EXVIUS_EVENT_ARCHIVE') == '1' and
                 not (saved_policy is not None and saved_policy.exists())):
             # The replay week's events remain open, and story checkpoints also open every event in
@@ -3125,7 +3126,7 @@ def serve_event_gate(spec, reply_id):
             "uv60hgDW": area,             # SubRegionId -- THE key the tile lookups match
             "U9iHsau3": dungeon,          # the dungeon the tile opens
             "qo3PECw6": mission,          # its first mission
-            "qnUhs32P": EVENT_GATE_TAB,   # 1-BASED tab: 1 = Event
+            "qnUhs32P": vortex_tab(event_name(area), EVENT_GATE_TAB),
             "Z0EN6jSh": EVENT_GATE_KIND,  # +0x100 -- the 1/2 selector getAreaIdWithBannerTouch reads
             "VjJQ51uG": EVENT_GATE_WINDOW_START,   # AcceptedDate
             "m8ivD4NX": EVENT_GATE_WINDOW_END,     # CompletedDate
@@ -4281,8 +4282,26 @@ def _selftest() -> int:
         import player_state as _ps4
         from unittest.mock import patch
         from ffbe_battle import roll_drops as _roll
+        from event_archive import event_name as _event_name, vortex_tab as _vortex_tab
         State.player = _ps4.PlayerState(_ps4.default_state("100000001", "Rain", now_ms=1789000000000),
                                         mode="live")
+        want("event gate: wiki categories select Enhance, Special and Nemeses tabs; unknowns stay on Event",
+             (_vortex_tab("King Mog's Lost Maps"), _vortex_tab("The Return"),
+              _vortex_tab("Chamber of Arms"), _vortex_tab("Unknown Event")),
+             ("2", "3", "4", "1"))
+        want("event gate: the optional tab setting still overrides category mappings",
+             _vortex_tab("Chamber of Arms", "1"), "1")
+        want("event gate: an area's archived name is what drives its category lookup",
+             _vortex_tab(_event_name("899")), "4")
+        want("event gate: the wiki category map includes every listed Enhance, Special Vortex and Nemeses page",
+             [len(_category["events"]) for _category in json.loads(
+                 open(os.path.join(HERE, "event_vortex_tabs.json"), encoding="utf-8").read()
+             )["categories"].values()],
+             [35, 8, 10, 0])
+        want("event gate: the archived generic Unit Popularity Contest name maps to Enhance",
+             _vortex_tab(_event_name("995")), "2")
+        want("event gate: archived Vault of Hidden Treasures events map to Enhance by name",
+             _vortex_tab(_event_name("301")), "2")
         facts = _event_area_facts()
         want("event gate: naming an area resolves its dungeon and first mission from the shipped tables",
              facts[0], ("970", "97001", "9700101"))

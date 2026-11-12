@@ -5,6 +5,8 @@ Each entry is one update to this repo. To update: in your repo folder run `git p
 ## 2026-11-12: Less-redundant summon banners
 
 - The summon list now removes banners whose featured units are repeated in another banner's lineup. When lineups are subsets or identical, the newest banner is kept regardless of its offer; if the dates match, the lineup with more featured units wins.
+- Banner detail previews now cycle through all featured units. Banners without featured units still load only one representative unit.
+- Newly generated Vortex gate rows use archived event names to match the full wiki lists for Enhance, Special Vortex and Nemeses instead of all appearing under Event. Existing native rows are unchanged; Chronicle Battle event names are not present in the current archive yet.
 
 ## 2026-11-11: Farplane, awakening and quest Gil fixes
 

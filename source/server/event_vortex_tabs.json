@@ -1,0 +1,80 @@
+{
+  "source": "https://exvius.fandom.com/wiki/Category:Vortex",
+  "categories": {
+    "Enhance": {
+      "tab": 2,
+      "events": [
+        "Cactuar Dunes",
+        "Chamber of Awakening",
+        "Chamber of Creation",
+        "Chamber of Crystals",
+        "Chamber of Crysts",
+        "Chamber of Enlightenment",
+        "Chamber of Experience",
+        "Chamber of Forticite",
+        "Chamber of Gems",
+        "Chamber of Riches",
+        "Chamber of Supercite",
+        "Daily Gil Hunt",
+        "FF EXVIUS Universe Campaign Daily Quest",
+        "Gil Snapper's Cave",
+        "King Mog's Lost Maps",
+        "The Enchanted Maze",
+        "Unit Popularity Contest (2019)",
+        "Vault of Hidden Treasures",
+        "Vault of Hidden Treasures (1 Year Anniversary Dungeon)",
+        "Vault of Hidden Treasures (April 2018)",
+        "Vault of Hidden Treasures (April 2019)",
+        "Vault of Hidden Treasures (August 2020)",
+        "Vault of Hidden Treasures (December 2018)",
+        "Vault of Hidden Treasures (Defiance of Fate)",
+        "Vault of Hidden Treasures (February 2019)",
+        "Vault of Hidden Treasures (January 2019)",
+        "Vault of Hidden Treasures (June 2019)",
+        "Vault of Hidden Treasures (March 2019)",
+        "Vault of Hidden Treasures (March 2020)",
+        "Vault of Hidden Treasures (May 2019)",
+        "Vault of Hidden Treasures (May 2020)",
+        "Vault of Hidden Treasures (November 2018)",
+        "Vault of Hidden Treasures (November 2019)",
+        "Vault of Hidden Treasures (October 2019)",
+        "Vault of Hidden Treasures (September 2018)"
+      ],
+      "aliases": [
+        "Unit Popularity Contest"
+      ]
+    },
+    "Special Vortex": {
+      "tab": 3,
+      "events": [
+        "Chamber of Blue Magic",
+        "Dark Lineage",
+        "Esper of Destruction",
+        "Revenge of the Lost Nation/JP",
+        "Short Stories",
+        "The Return",
+        "Training the Soul",
+        "Ultimate Summon/JP"
+      ]
+    },
+    "Nemeses": {
+      "tab": 4,
+      "events": [
+        "Advent of Purgatory",
+        "Chamber of Arms",
+        "Chamber of the Fallen",
+        "Chamber of the Indignant",
+        "Chamber of the Reborn",
+        "Chamber of the Vengeful",
+        "Hidden Chamber of Arms",
+        "Series Boss Battle",
+        "Trials/JP",
+        "Twelve Types Takedown"
+      ]
+    },
+    "Chronicle Battle": {
+      "tab": 5,
+      "events": []
+    }
+  }
+}
