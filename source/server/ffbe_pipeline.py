@@ -405,7 +405,7 @@ PIPELINE: tuple = (
     # fills the player groups a handler's reply asks for.
     Step("serve_actions", lambda c: serve_actions(c.spec, c.reply_id, c.plaintext),
          "state", "State.player"),
-    Step("serve_switches", lambda c: serve_switches(c.spec, c.reply_id),
+    Step("serve_switches", lambda c: serve_switches(c.spec, c.reply_id, c.is_battle_bundle, c.spec_key),
          "spec", "8J1R5PXG", "publish switches after normal and special-mode settlements"),
     Step("serve_feature_state", lambda c: serve_feature_state(c.spec, c.reply_id),
          "spec", "offline feature state", "restore crafting, gifts, points and Trust Coin stock"),

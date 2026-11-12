@@ -29,12 +29,14 @@ def parse_rewards(raw):
     return parse(raw)
 
 
-def complete_attempt(player, mid, cleared, challenges, checks, context, lapis_enabled=True):
+def complete_attempt(player, mid, cleared, challenges, checks, context, lapis_enabled=True,
+                     auto_clear_challenges=False):
     """One serialized reward transaction, using upstream reward projection methods.
 
     challenges: dictionaries with id, condition, rewards (unchanged MST strings).
-    Unknown/unmet conditions do not pay. Unsupported reward groups are reported,
-    not converted into Lapis. State rollback protects against a partial grant.
+    Unknown/unmet conditions do not pay unless the caller explicitly marks a qualifying
+    main-story clear. Unsupported reward groups are reported, not converted into Lapis.
+    State rollback protects against a partial grant.
     """
     if player.mode == 'frozen':
         return {'paid': [], 'blocked': [], 'reason': 'frozen'}
@@ -49,10 +51,11 @@ def complete_attempt(player, mid, cleared, challenges, checks, context, lapis_en
             if cleared is True:
                 for challenge in challenges:
                     cid = str(challenge['id'])
-                    code, _, param = challenge['condition'].partition(':')
-                    check = checks.get(code)
-                    if check is None or check(context, param) is not True:
-                        continue
+                    if not auto_clear_challenges:
+                        code, _, param = challenge['condition'].partition(':')
+                        check = checks.get(code)
+                        if check is None or check(context, param) is not True:
+                            continue
                     player.mark_challenge_cleared(str(mid), cid)
                     # Grandfather historical paid challenges conservatively, once per challenge.
                     # Legacy marker is NOT proof that non-Lapis inventory was delivered.
@@ -201,6 +204,7 @@ def repeat_challenge_rewards(spec, mid, plaintext):
     from ffbe_state import State, _note
     from ffbe_config import RESULT_TAG, CHALLENGE_MST, LAPIS_AWARD
     from ffbe_battle import mission_result_from, CONDITION_CHECKS, challenge_table
+    from player_state import is_main_story_mission
     if not isinstance(spec, dict) or RESULT_TAG not in spec or not mid:
         return spec
     context = mission_result_from(plaintext)
@@ -218,8 +222,10 @@ def repeat_challenge_rewards(spec, mid, plaintext):
         _note('repeat rewards withheld: challenge table unavailable/invalid: ' + str(exc))
         return spec
     already = set(State.player.cleared_challenges.get(str(mid), set()))
+    story_clear = is_main_story_mission(mid) and context['cleared'] is True
     result = complete_attempt(State.player, mid, context['cleared'], challenges.values(),
-                              CONDITION_CHECKS, context, LAPIS_AWARD)
+                              CONDITION_CHECKS, context, LAPIS_AWARD,
+                              auto_clear_challenges=story_clear)
     if result['reason'] == 'completed':
         State.state_dirty = True
         from exvius_fortuna import complete as complete_fortuna

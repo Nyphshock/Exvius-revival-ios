@@ -803,7 +803,7 @@ def echo_client_group(spec, plaintext, group: str):
     out = dict(spec)
     out[group] = rows
     return out
-def serve_switches(spec, reply_id=None):
+def serve_switches(spec, reply_id=None, is_battle_bundle=False, spec_key=None):
     """Rewrite every TRACKED switch type's container in this reply from the one tracked state.
 
     Two things this fixes at once. (a) The container replaces the whole type, so two replies carrying
@@ -818,6 +818,8 @@ def serve_switches(spec, reply_id=None):
     left exactly as it is, except the login replies publish the authoritative
     containers before the native client can reuse an earlier campaign's flags.
     Town updates publish the same authoritative switches after town chests settle.
+    Mission and town resource bundles also publish switches so reopened maps
+    restore the settled chest state before drawing.
     """
     if not isinstance(spec, dict):
         return spec
@@ -841,6 +843,12 @@ def serve_switches(spec, reply_id=None):
     switch_groups = [key for key, rows in spec.items()
                      if isinstance(rows, list)
                      and any(isinstance(r, dict) and SWITCH_TYPE_FIELD in r for r in rows)]
+    is_town_bundle = spec_key == f'{reply_id}#town'
+    if not switch_groups and wanted and reply_id == 'jnw49dUq' and (is_battle_bundle or is_town_bundle):
+        out = dict(spec)
+        out['8J1R5PXG'] = [{SWITCH_TYPE_FIELD: stype, SWITCH_BITS_FIELD: bits}
+                            for stype, bits in sorted(wanted.items())]
+        return out
     if not switch_groups and wanted and reply_id in ('75fYdNxq', 'X07iYtp5', 'G1hQM8Dr'):
         out = dict(spec)
         out['8J1R5PXG'] = [{SWITCH_TYPE_FIELD: stype, SWITCH_BITS_FIELD: bits}
