@@ -102,6 +102,7 @@ STATE_SLOT = os.environ.get("STATE_SLOT", "default")
 STATE_MODE = os.environ.get("STATE_MODE", "live")
 STATE_OVERLAY: list = []
 STATE_SETS: list = []
+PROFILE_ID: str | None = None
 
 
 class State:
@@ -474,5 +475,5 @@ def save_state() -> None:
 
 __all__ = ["State", "LAST_DROPS", "NOTES", "_note", "SEASON", "SEASON_SELECTOR", "SEASON_MTIME",
            "GACHA_CAMPAIGN", "STATE_FILE", "STATE_SLOT", "STATE_MODE", "STATE_OVERLAY", "STATE_SETS",
-           "STATE_PERSIST", "load_endpoints", "endpoint_for", "reload_replies_if_changed",
+           "STATE_PERSIST", "PROFILE_ID", "load_endpoints", "endpoint_for", "reload_replies_if_changed",
            "reload_season_if_changed", "load_state", "save_state", "warn_if_source_is_newer"]

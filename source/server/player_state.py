@@ -4959,7 +4959,9 @@ class PlayerState:
         out = dict(spec)                      # never mutate the loaded payload (State.replies is shared)
         if "LhVz6aD2" in out:
             # UserGiftInfoList compares FriendID, independently of UserID.
-            out["LhVz6aD2"] = [dict(row, m3Wghr1j=self.friend_id(),
+            user_info = {"m3Wghr1j": self.friend_id(),
+                         "9Tbns0eI": str(self.data["identity"]["user_id"])}
+            out["LhVz6aD2"] = [dict(row, **user_info,
                                          **({'9qh17ZUf': self.data['identity']['handle_name']}
                                             if '9qh17ZUf' in row else {}))
                                 for row in (out["LhVz6aD2"] or [{}])]

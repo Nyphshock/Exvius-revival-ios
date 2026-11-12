@@ -115,6 +115,7 @@ from ffbe_pipeline import reply_pipeline, _PIPELINE_PROBLEMS
 # the server, and `BATTLE_DERIVE=off` makes it a no-op.
 import battle_content
 from offline_menu import STATE_LOCK, status as offline_status, new_game as offline_new_game
+from player_profiles import (PlayerProfileManager, ProfileMapError, UnregisteredClientError)
 from sp_challenge_web import matches as is_sp_challenge_page, page as sp_challenge_details_page
 
 
@@ -133,6 +134,8 @@ if _PIPELINE_PROBLEMS:
 # the placeholder for every unauthored mission. Kept here (not imported from `harness/`) so the server has no
 # build-time dependency on the derivation tool; `harness/derive_battle_payload.py` is the tool that writes them.
 BATTLE_BUNDLE_REPLY_ID = "jnw49dUq"
+CREATE_USER_REQUEST_ID = "P6pTz4WA"
+PROFILE_MANAGER: PlayerProfileManager | None = None
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -141,6 +144,32 @@ class Handler(BaseHTTPRequestHandler):
 
     def log_message(self, fmt, *args):  # silence the default stderr line; we log structurally
         pass
+
+    def _registration_name(self, raw):
+        try:
+            envelope = json.loads(raw.decode("utf-8", errors="replace"))
+            header = envelope.get("TEAYk6R1", {}) or {}
+            token = self.path.rsplit("/", 1)[-1].removesuffix(".php")
+            reply_id = header.get("z5hB3P01") or token
+            if reply_id != CREATE_USER_REQUEST_ID:
+                return None
+            ep, _ = endpoint_for(self.path, reply_id)
+            ciphertext = (envelope.get("t7n6cVWf") or {}).get("qrVcDe48")
+            if not ep or not ciphertext:
+                return ""
+            plaintext = cbc_decrypt(key16(ep["encode_key"]), ciphertext).decode(
+                "utf-8", errors="replace")
+            request = json.JSONDecoder().raw_decode(plaintext)[0]
+            rows = request.get("LhVz6aD2") if isinstance(request, dict) else None
+            if isinstance(rows, dict):
+                rows = [rows]
+            if isinstance(rows, list) and rows and isinstance(rows[0], dict):
+                name = rows[0].get("9qh17ZUf")
+                return name if isinstance(name, str) else ""
+        except Exception as exc:  # noqa: BLE001 -- malformed registration is denied for an unmapped peer
+            print(f"PROFILE REGISTRATION ERROR from {self.client_address[0]}: {exc}", flush=True)
+            return ""
+        return ""
 
     def _handle(self, raw=None, lock_wait_ms=0):
         started = time.monotonic()
@@ -435,14 +464,16 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if self.path == '/__exvius/new-game':
             with STATE_LOCK:
-                return self._offline_menu(reset=True)
+                return self._run_profiled(lambda: self._offline_menu(reset=True))
         if '/actionSymbol/' in self.path:
             length = int(self.headers.get("Content-Length") or 0)
             raw = self.rfile.read(length) if length else b""
             waiting = time.monotonic()
+            registration_name = self._registration_name(raw)
             with STATE_LOCK:
                 lock_wait_ms = (time.monotonic() - waiting) * 1000
-                self._handle(raw, lock_wait_ms)
+                self._run_profiled(lambda: self._handle(raw, lock_wait_ms),
+                                   registration_name=registration_name)
         else:
             with STATE_LOCK:
                 # Original web pages post device parameters when opening.
@@ -452,7 +483,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == '/__exvius/status':
             with STATE_LOCK:
-                return self._offline_menu()
+                return self._run_profiled(self._offline_menu)
         self._cdn_fetch()
 
     def _offline_menu(self, reset=False):
@@ -478,6 +509,68 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Content-Length', str(len(data)))
         self.end_headers()
         self.wfile.write(data)
+
+    def _run_profiled(self, operation, *, registration_name=None):
+        if PROFILE_MANAGER is None:
+            return operation()
+        try:
+            with PROFILE_MANAGER.activate(self.client_address[0], registration_name=registration_name):
+                return operation()
+        except UnregisteredClientError as exc:
+            print(f"PROFILE DENIED from {self.client_address[0]}: {exc}", flush=True)
+            return self._profile_error(403, "This device is not assigned to a player profile.")
+        except ProfileMapError as exc:
+            print(f"PROFILE MAP ERROR: {exc}", file=sys.stderr, flush=True)
+            return self._profile_error(503, "Player profiles are temporarily unavailable.")
+
+    def _profile_error(self, status, message):
+        data = json.dumps({"error": message}).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def _serve_dynamic_page(self, path, raid_page, rates_page, parade_page, equip_page,
+                            notice_page, sp_challenge_page, clash_page):
+        if notice_page:
+            from replay_notices import page as notice_html
+            html = notice_html(notice_page.group(1))
+        elif sp_challenge_page:
+            self._form_field('')
+            html = sp_challenge_details_page(getattr(self, '_form', {}))
+        elif raid_page:
+            from exvius_raid_progress import personal_rewards_page
+            html = personal_rewards_page(State.player, raid_page.group(1))
+        elif equip_page:
+            from exvius_actions_modes import equip_grow_notice_page
+            html = equip_grow_notice_page()
+        elif parade_page:
+            from exvius_actions_modes import parade_rewards_page
+            html = parade_rewards_page(State.player)
+        elif clash_page:
+            from urllib.parse import urlsplit, parse_qs
+            from exvius_fortuna import rewards_page, claim_selected
+            token = parse_qs(urlsplit(self.path).query).get('claim', [''])[0]
+            if token and self.command != 'HEAD' and claim_selected(State.player, token):
+                st.save_state()
+            html = rewards_page(State.player, path.endswith('clash-ranking.html'))
+        else:
+            from gacha_rates import page, index_page
+            # No banner named (the request lost its posted gacha_id): this week's summons, each linked.
+            html = page(rates_page.group(1)) if rates_page.group(1) else index_page()
+        if html is None:
+            self.send_error(404, 'Local content unavailable')
+            return
+        data = html.encode('utf-8')
+        self.send_response(200)
+        self.send_header('Content-Type', 'text/html; charset=utf-8')
+        self.send_header('Cache-Control', 'no-store')
+        self.send_header('Content-Length', str(len(data)))
+        self.end_headers()
+        if self.command != 'HEAD':
+            self.wfile.write(data)
 
     def do_HEAD(self):
         self._cdn_fetch()
@@ -559,43 +652,9 @@ class Handler(BaseHTTPRequestHandler):
         clash_page = path in ('/exvius/clash-rewards.html', '/exvius/clash-ranking.html')
         if raid_page or rates_page or parade_page or clash_page or equip_page or notice_page or sp_challenge_page:
             with STATE_LOCK:
-                if notice_page:
-                    from replay_notices import page as notice_html
-                    html = notice_html(notice_page.group(1))
-                elif sp_challenge_page:
-                    self._form_field('')
-                    html = sp_challenge_details_page(getattr(self, '_form', {}))
-                elif raid_page:
-                    from exvius_raid_progress import personal_rewards_page
-                    html = personal_rewards_page(State.player, raid_page.group(1))
-                elif equip_page:
-                    from exvius_actions_modes import equip_grow_notice_page
-                    html = equip_grow_notice_page()
-                elif parade_page:
-                    from exvius_actions_modes import parade_rewards_page
-                    html = parade_rewards_page(State.player)
-                elif clash_page:
-                    from urllib.parse import urlsplit, parse_qs
-                    from exvius_fortuna import rewards_page, claim_selected
-                    token = parse_qs(urlsplit(self.path).query).get('claim', [''])[0]
-                    if token and self.command != 'HEAD' and claim_selected(State.player, token):
-                        st.save_state()
-                    html = rewards_page(State.player, path.endswith('clash-ranking.html'))
-                else:
-                    from gacha_rates import page, index_page
-                    # No banner named (the request lost its posted gacha_id): this week's summons, each linked.
-                    html = page(rates_page.group(1)) if rates_page.group(1) else index_page()
-            if html is None:
-                self.send_error(404, 'Local content unavailable')
-                return
-            data = html.encode('utf-8')
-            self.send_response(200)
-            self.send_header('Content-Type', 'text/html; charset=utf-8')
-            self.send_header('Cache-Control', 'no-store')
-            self.send_header('Content-Length', str(len(data)))
-            self.end_headers()
-            if self.command != 'HEAD':
-                self.wfile.write(data)
+                self._run_profiled(lambda: self._serve_dynamic_page(
+                    path, raid_page, rates_page, parade_page, equip_page, notice_page,
+                    sp_challenge_page, clash_page))
             return
         # The client's fetch path mirrors its own on-disk layout under `files/`:
         #   /mst/Ver<N>_<token>.dat            -> files/mst/...
@@ -894,6 +953,9 @@ def _seed_max_test_roster(args) -> int:
 
 
 def main(argv=None, *, in_process=False) -> int:
+    global PROFILE_MANAGER
+    PROFILE_MANAGER = None
+    st.PROFILE_ID = None
     # These live in ffbe_state because they are REBOUND here and on every season hot-reload, so a reader
     # elsewhere must reach them as `st.X`; assigning through the module is what keeps the two in step.
     # See ffbe_state's docstring -- a `from ffbe_state import STATE_FILE` would be a stale snapshot.
@@ -924,6 +986,8 @@ def main(argv=None, *, in_process=False) -> int:
                     help="decrypted reply bodies keyed by requestID (or URL token, or _default)")
     ap.add_argument("--state-file", default=None,
                     help="explicit path for the server's own state (also STATE_FILE env); `--wipe` deletes it")
+    ap.add_argument("--profile-map", default=os.environ.get("FFBE_PROFILE_MAP"),
+                    help="JSON file mapping Tailscale peer IP addresses to player IDs")
     ap.add_argument("--state", default=None,
                     help="named slot to load: out/state/<name>.json (schema §1.1)")
     ap.add_argument("--state-mode", default=os.environ.get("STATE_MODE", "live"),
@@ -1234,6 +1298,11 @@ def main(argv=None, *, in_process=False) -> int:
     # which value was in force cannot be attributed afterwards.
     print(f"switch base (type {SWITCH_TYPE_MISSION}): "
           f"{list(SWITCH_BASE_INDICES) if SWITCH_BASE_INDICES else 'NONE - nothing pre-granted'}", flush=True)
+
+    try:
+        PROFILE_MANAGER = PlayerProfileManager(args.profile_map)
+    except ProfileMapError as exc:
+        raise SystemExit(f"profile map: {exc}") from exc
 
     if in_process:
         return 0

@@ -69,6 +69,11 @@ def _roll_items(src: str | None) -> str:
 CALAMITY_WRIT = "20:290060400"
 
 
+def _drop_state_key(mid: str) -> str:
+    """Keep the request-to-result drop channel separate for each active player profile."""
+    return f"{st.PROFILE_ID}:{mid}" if st.PROFILE_ID is not None else str(mid)
+
+
 def calamity_writ_chance() -> float:
     """`EXVIUS_CALAMITY_WRIT_DROP`: percent chance per enemy drop roll (default 0.5; 0 turns it off). Each enemy
     in a battle wave and each exploration battle rolls once: about 1 Writ per 20 story missions."""
@@ -114,7 +119,7 @@ def roll_drops(spec, mid: str | None = None, is_battle_bundle: bool = False):
         # This mission's bundle carries no drop rows at all, so it OWNS its slot and claims it empty --
         # a battle that rolled nothing must not inherit the previous battle's drops.
         if is_battle_bundle and mid is not None:
-            st.LAST_DROPS.pop(str(mid), None)
+            st.LAST_DROPS.pop(_drop_state_key(str(mid)), None)
         return spec
     spec = dict(spec)
     out = []
@@ -169,7 +174,7 @@ def roll_drops(spec, mid: str | None = None, is_battle_bundle: bool = False):
                 order.append(key)
             counts[key] = counts.get(key, 0) + (int(f[2]) if len(f) > 2 and f[2].isdigit() else 1)
     if is_battle_bundle and mid is not None:
-        st.LAST_DROPS[str(mid)] = [f"{c}:{i}:{counts[(c, i)]}" for c, i in order]
+        st.LAST_DROPS[_drop_state_key(str(mid))] = [f"{c}:{i}:{counts[(c, i)]}" for c, i in order]
     return spec
 def apply_result_drops(spec, mid: str | None = None):
     """Put THIS battle's roll into the result screen's item channels.
@@ -199,7 +204,7 @@ def apply_result_drops(spec, mid: str | None = None):
         return spec
     # THIS mission's own roll, or nothing. The old unkeyed `if not LAST_DROPS` check was true whenever
     # ANY battle had ever rolled in the session, so an unrelated battle's drops could be mirrored here.
-    rolled_for_this = st.LAST_DROPS.get(str(mid)) if mid is not None else None
+    rolled_for_this = st.LAST_DROPS.get(_drop_state_key(str(mid))) if mid is not None else None
     if not rolled_for_this:
         return spec              # this battle never rolled: keep the payload's own fallback, untouched
     # ARITY: the two channels are parsed by DIFFERENT code with DIFFERENT field counts.

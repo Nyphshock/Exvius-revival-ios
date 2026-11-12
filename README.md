@@ -279,6 +279,34 @@ The server also keeps a record of each request it received, for three days and a
 
 **Your save** is in `FFBE_DIR/server/state/`. Back up that folder.
 
+### Multiple players on the same Tailscale server
+
+The server can keep a separate save for each Tailscale device. Create
+`FFBE_DIR/server/state/profiles.json` on the host:
+
+```json
+{
+  "version": 1,
+  "default_player_id": "100000001",
+  "clients": {
+    "100.x.y.z": "100000001"
+  }
+}
+```
+
+Replace the example address with the existing owner's Tailscale IP from the Tailscale admin console.
+The default ID must match the existing save's `identity.user_id`, so that save stays with its current
+owner. When another device first registers in the game and submits its chosen player name, the server
+creates a fresh profile under `FFBE_DIR/server/state/profiles/`, assigns it a new numeric player ID, and
+adds that device's Tailscale IP to `clients`. Further devices remain denied until they register; an
+unmapped IP can only create a profile through the game's `CreateUserRequest`. Multiple device addresses
+can point to the same ID to share a profile. Without this file, the server continues to use its existing
+single save.
+
+This separates player progress and the battle data carried between requests. It does not yet turn
+friend requests into interactions between real server profiles; that requires a shared friend directory
+and is a separate follow-up.
+
 **Certificates** are in `FFBE_DIR/server/certs/`. They're made on your computer the first time the server starts and never leave it.
 
 - The root certificate on your phone lasts ten years.
