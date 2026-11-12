@@ -7,13 +7,25 @@ def matches(path: str) -> bool:
     return unquote(path.split("?", 1)[0]).lower().endswith("/spchallenge.php")
 
 
-def render(picked, tables, daily_quests=()) -> str:
+def selected_quest_id(fields, available_ids) -> str:
+    available = {str(quest_id) for quest_id in available_ids}
+    for values in fields.values():
+        for value in values if isinstance(values, (list, tuple)) else [values]:
+            quest_id = str(value).strip()
+            if quest_id in available:
+                return quest_id
+    return ""
+
+
+def render(selected_id, picked, tables, daily_quests=()) -> str:
     titles = tables.get("titles") or {}
     schedule_names = tables.get("schedule_names") or {}
     sections = []
 
     daily_items = []
     for quest_id, quest in daily_quests:
+        if str(quest_id) != selected_id:
+            continue
         title = quest.get("name") or f"Daily Quest {quest_id}"
         detail = quest.get("detail") or ""
         try:
@@ -33,7 +45,7 @@ def render(picked, tables, daily_quests=()) -> str:
         quests = []
         for row in rows:
             quest_id = str(row.get("V36ygRYs", ""))
-            if not quest_id:
+            if not quest_id or quest_id != selected_id:
                 continue
             title = titles.get(f"MST_SPCHALLENGE_NAME_{quest_id}") or f"MST_SPCHALLENGE_NAME_{quest_id}"
             try:
@@ -48,7 +60,7 @@ def render(picked, tables, daily_quests=()) -> str:
                 f"<section><h2>{escape(str(schedule_title))}</h2><ol>{''.join(quests)}</ol></section>"
             )
 
-    content = "".join(sections) or "<p>No quest details are available for the current schedule.</p>"
+    content = "".join(sections) or "<p>No details are available for the selected quest.</p>"
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -68,13 +80,20 @@ li:last-child{{border-bottom:0}} h3{{margin:0;font-size:17px}} .goal{{margin:6px
 </html>"""
 
 
-def page() -> str:
+def page(fields) -> str:
     from ffbe_player import State, daily_quest_by_id, sp_challenge_picked, sp_challenge_tables
 
     tables = sp_challenge_tables()
     daily = []
+    picked = sp_challenge_picked()
+    available_ids = set()
     if State.player is not None:
         catalogue = daily_quest_by_id()
         daily = [(str(quest_id), catalogue[str(quest_id)])
                  for quest_id in State.player.daily_quest_ids() if str(quest_id) in catalogue]
-    return render(sp_challenge_picked(), tables, daily)
+        available_ids.update(quest_id for quest_id, _quest in daily)
+    available_ids.update(str(row.get("V36ygRYs", ""))
+                         for _group, rows in picked for row in rows if row.get("V36ygRYs"))
+
+    selected_id = selected_quest_id(fields, available_ids)
+    return render(selected_id, picked, tables, daily)

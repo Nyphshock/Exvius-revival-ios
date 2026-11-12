@@ -563,7 +563,8 @@ class Handler(BaseHTTPRequestHandler):
                     from replay_notices import page as notice_html
                     html = notice_html(notice_page.group(1))
                 elif sp_challenge_page:
-                    html = sp_challenge_details_page()
+                    self._form_field('')
+                    html = sp_challenge_details_page(getattr(self, '_form', {}))
                 elif raid_page:
                     from exvius_raid_progress import personal_rewards_page
                     html = personal_rewards_page(State.player, raid_page.group(1))
