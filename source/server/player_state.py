@@ -911,6 +911,19 @@ def mission_wave_count(mission_id) -> int | None:
     return int(value) if value is not None and str(value).isdigit() else None
 
 
+def _main_story_mission_row(mission_id) -> dict | None:
+    mission = mission_row(mission_id)
+    if mission is None:
+        return None
+    world = _load_ndjson('F_WORLD_MST.ndjson', '9Pb24aSy').get(mission.get('9Pb24aSy'), {})
+    return mission if world.get('dw2nvP3r') == '1' else None
+
+
+def is_main_story_mission(mission_id) -> bool:
+    """Whether the mission belongs to a world marked as main story in `F_WORLD_MST`."""
+    return _main_story_mission_row(mission_id) is not None
+
+
 def mission_open_switch(mission_id) -> str | None:
     """`F_MISSION_MST.dIPkNn61`: the switch a mission OPENS when it is cleared.
 
@@ -939,11 +952,8 @@ def switch_position(switch_id) -> tuple[str, int] | None:
 
 def _main_story_clear_switches(mission_id) -> dict[str, tuple[str, int]]:
     """Read the additional progression bits awarded by an original world mission."""
-    mission = mission_row(mission_id)
+    mission = _main_story_mission_row(mission_id)
     if mission is None:
-        return {}
-    world = _load_ndjson('F_WORLD_MST.ndjson', '9Pb24aSy').get(mission.get('9Pb24aSy'), {})
-    if world.get('dw2nvP3r') != '1':
         return {}
     switches = {}
     for value in str(mission.get(MISSION_OPEN_SWITCH) or '').split(','):

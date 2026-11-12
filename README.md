@@ -388,6 +388,10 @@ The original game's Lapis income assumed you'd buy Lapis. These settings raise w
 | `EXVIUS_FIRST_CLEAR_BACKPAY` | `1` (default) sends one mail, once, with the first-clear rewards of every quest you had already cleared before first-clear rewards were paid (Lapis is multiplied when you receive it). `0` doesn't send it. |
 | `EXVIUS_REPLAY_MAILS` | Global's mails to every player (the Guaranteed NV Summon Ticket in Jan 2021, the Player Appreciation tickets in Sep 2021, Feb 2022 and Jun 2022), each sent once when the replay reaches its date. Default `1`; `0` turns them off. |
 
+**Main-story mission stars**
+
+When you successfully clear a mission in a world marked as main story, all of that mission's challenge stars are recorded as complete, regardless of their individual conditions. Any Lapis tied to those challenges is paid through the normal first-clear reward system, once only. This applies only to main-story missions; other quests still require their challenge conditions to be met, and a failed clear awards no stars or Lapis.
+
 **Trust from quests**
 
 Each successful clear of any quest (story, exploration, Vortex, events) gives every unit of your own party a chance at more trust (Trust Master %); the friend's unit gains nothing. The result screen counts it up and shows the Trust Master reward when a unit reaches 100%. Each unit rolls on its own. The defaults are Japan's rule (a 30% chance of +1% per unit per clear), plus a small extra: 5% of those hits give +5% instead. That's about 280 clears for 100%. Global's rule was a 10% chance of +0.1%, about 10,000 clears. Trust Moogles, duplicates and expeditions still work as before; a Trust expedition that reaches 100% now also pays the reward.

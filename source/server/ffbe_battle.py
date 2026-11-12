@@ -17,7 +17,8 @@ import copy, json, os, random, re
 from ffbe_config import *          # noqa: F401,F403 -- constants; the table has no behaviour
 import ffbe_state as st           # the REBOUND runtime state; see ffbe_state's docstring
 from ffbe_state import State, _note
-from player_state import (credit_exp, mission_open_switch, mission_wave_count, story_beast_for_mission, story_beast_stats,
+from player_state import (credit_exp, is_main_story_mission, mission_open_switch, mission_wave_count,
+                          story_beast_for_mission, story_beast_stats,
                           switch_position, unit_stats, _load_ndjson)
 
 
@@ -940,15 +941,16 @@ def credit_mission_lapis(spec, mid: str | None, plaintext: str | None = None):
     """Record the challenges this mission CLEARED, and pay the first clear's lapis.
 
     Two jobs on one pass, deliberately NOT the same set:
-      * `progress.cleared_challenges` -- EVERY spec-bearing challenge we can WITNESS as met, lapis or not.
+      * `progress.cleared_challenges` -- EVERY spec-bearing challenge we can WITNESS as met, lapis or not;
+        completing a main-story mission automatically clears all its challenge rows.
         This is the cumulative set `serve_challenge_clear` serves as `qdhWF7z9`, and the client derives a
         mission's "complete" icon from it (`GateMissionScene` -> `UserChallengeInfoList::isClear` for every
         displayed challenge -- `docs/notes/mission_flag_predicate.md` §7).
       * `progress.paid_challenges` -- the FIRST-CLEAR payment gate, lapis-bearing challenges only.
 
-    `LAPIS_AWARD` gates the currency, never the cleared record: a no-lapis challenge must still mark. Only
-    conditions we can actually EVALUATE are witnessed (see CONDITION_CHECKS); an unevaluated one is named
-    in a note instead of being recorded, so a shortfall is visible rather than silent.
+    `LAPIS_AWARD` gates the currency, never the cleared record: a no-lapis challenge must still mark. Outside
+    the main story, only conditions we can actually EVALUATE are witnessed (see CONDITION_CHECKS); an
+    unevaluated one is named in a note instead of being recorded, so a shortfall is visible rather than silent.
     """
     if not isinstance(spec, dict) or RESULT_TAG not in spec or not mid:
         return spec
@@ -960,18 +962,24 @@ def credit_mission_lapis(spec, mid: str | None, plaintext: str | None = None):
     paid = State.player.paid_challenges.get(str(mid), set())
     cleared_before = len(cleared)
     ctx = mission_result_from(plaintext)
+    story_clear = is_main_story_mission(mid) and ctx["cleared"] is True
     fresh, unmet, unknown = {}, [], []
+    story_auto_cleared = []
     for cid, (amount, cond, _order) in sorted(table.items()):
         # Skip anything already settled. A LAPIS challenge that was cleared while the award was off is NOT
         # settled -- it has not been paid -- so re-evaluate it and pay it now.
         if cid in cleared and (not amount or cid in paid):
             continue
-        ctype, _, param = cond.partition(":")
-        check = CONDITION_CHECKS.get(ctype)
-        if check is None:
-            unknown.append(f"{cid}(type {ctype})")
-            continue
-        verdict = check(ctx, param)
+        if story_clear:
+            verdict = True
+            story_auto_cleared.append(cid)
+        else:
+            ctype, _, param = cond.partition(":")
+            check = CONDITION_CHECKS.get(ctype)
+            if check is None:
+                unknown.append(f"{cid}(type {ctype})")
+                continue
+            verdict = check(ctx, param)
         if verdict is True:
             if amount and LAPIS_AWARD:
                 fresh[cid] = amount          # recorded by `credit_challenge` below (cleared + paid)
@@ -985,6 +993,9 @@ def credit_mission_lapis(spec, mid: str | None, plaintext: str | None = None):
         _note(f"mission {mid}: condition NOT evaluated, so NOT recorded: {', '.join(unknown)}")
     if unmet:
         print(f"    note: mission {mid}: challenge NOT met: {', '.join(unmet)}", flush=True)
+    if story_auto_cleared:
+        print(f"    story: mission {mid} completed -> all {len(story_auto_cleared)} challenge(s) cleared "
+              f"regardless of their conditions", flush=True)
     cleared_no_reward = len(cleared) - cleared_before
     if not fresh:
         print(f"    award: +0 lapis (mission {mid}) -- {len(table)} challenge(s): "
