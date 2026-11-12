@@ -2,7 +2,14 @@
 
 Each entry is one update to this repo. To update: in your repo folder run `git pull`, then from `ios-server` run `docker compose build && docker compose up -d`. Your save isn't touched. Open the game twice afterwards so it picks up the new data.
 
-## 2026-11-12: Less-redundant summon banners
+## 2026-11-12: Summons, LB EXP, Kira and Vision Cards
+
+- The friend point Standard Summon has a 10x button: 10 units for 2,000 friend points.
+- Clearing a quest now gives LB EXP to every unit in your party, as on Global: 100 per stamina, 250 per raid orb, 100 per weapon-enhancement orb. Losing or retiring gives none.
+- Kira's abilities that showed no name in battle now have English names and descriptions.
+- Fixed the game crashing when you view the Metal Gigantuar's Here! vision card in the VIP Shop (and other vision cards sold or won the same way).
+- `EXVIUS_SUMMON_ROTATION` set to `0` shows the full summon archive, subject to story-season locks, and turns the historical replay off.
+- Open the game twice after updating.
 
 - The summon list now removes banners whose featured units are repeated in another banner's lineup. When lineups are subsets or identical, the newest banner is kept regardless of its offer; if the dates match, the lineup with more featured units wins.
 - Banner detail previews now cycle through all featured units. Banners without featured units still load only one representative unit.

@@ -41,7 +41,8 @@ services:
       # 1 asks the game to upload its own error log (saved in server/client-reports/) for troubleshooting,
       # once per launch (tens of MB each). Leave it 0 otherwise.
       EXVIUS_CLIENT_REPORTS: "0"
-      # Weekly summons follow replay history; all banners from story seasons a player has unlocked remain available.
+      # Weekly summons follow replay history; story-season locks remain in effect. Set to 0 to show the full
+      # archive (still story-locked) and turn off the historical replay. Then run: docker compose up -d
       EXVIUS_SUMMON_ROTATION: "1"
       EXVIUS_ROTATION_TZ: America/New_York
       EXVIUS_ROTATION_DAY: "6"        # 0 = Monday ... 6 = Sunday
