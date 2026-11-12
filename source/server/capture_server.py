@@ -115,6 +115,7 @@ from ffbe_pipeline import reply_pipeline, _PIPELINE_PROBLEMS
 # the server, and `BATTLE_DERIVE=off` makes it a no-op.
 import battle_content
 from offline_menu import STATE_LOCK, status as offline_status, new_game as offline_new_game
+from sp_challenge_web import matches as is_sp_challenge_page, page as sp_challenge_details_page
 
 
 import random
@@ -539,6 +540,7 @@ class Handler(BaseHTTPRequestHandler):
         equip_page = path == '/exvius/equipment-enhancement.html'
         notice_page = re.fullmatch(r'/exvius/notices/(\d+)\.html', path)
         notice_art = re.fullmatch(r'/exvius/notice-art/unit/(\d+)\.png', path)
+        sp_challenge_page = is_sp_challenge_page(path)
         if notice_art:
             # The unit's picture from the game's own unit packs (unit_art.py), not the wiki.
             from unit_art import picture
@@ -555,11 +557,13 @@ class Handler(BaseHTTPRequestHandler):
                 self.wfile.write(image)
             return
         clash_page = path in ('/exvius/clash-rewards.html', '/exvius/clash-ranking.html')
-        if raid_page or rates_page or parade_page or clash_page or equip_page or notice_page:
+        if raid_page or rates_page or parade_page or clash_page or equip_page or notice_page or sp_challenge_page:
             with STATE_LOCK:
                 if notice_page:
                     from replay_notices import page as notice_html
                     html = notice_html(notice_page.group(1))
+                elif sp_challenge_page:
+                    html = sp_challenge_details_page()
                 elif raid_page:
                     from exvius_raid_progress import personal_rewards_page
                     html = personal_rewards_page(State.player, raid_page.group(1))
