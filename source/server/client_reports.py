@@ -15,20 +15,20 @@ and waits for a "report state" group in the answer. Read from the Android 9.0 li
 
 This matters for a stock client such as the iPhone app, whose own system log is redacted: its reports
 are the only place the client says what went wrong. Collection is off by default; turn on
-EXVIUS_CLIENT_REPORTS=1 to save uploads under <server data>/client-reports/. Pending uploads are
-acknowledged and discarded while collection is off.
+EXVIUS_CLIENT_REPORTS=1 to save uploads under <server data>/client-reports/. The request is sent on
+the first RoutineHomeUpdateRequest after the Home screen loads, not during login, and only once per
+profile per server process. Pending uploads are acknowledged and discarded while collection is off.
 
-OFF BY DEFAULT since 2026-11-10. The request used to ride on every RoutineHomeUpdateRequest reply too, which the
-game sends about every 15 seconds, and the game then uploaded its whole log each time (a player measured about
-22 MB every 15 seconds, public repo PR #2), so loading was slow. Off, the server asks for nothing; an upload
-the game already has queued is still answered (report state 0) so it doesn't retry, but not saved, and the
-server prints one line with its size. The per-request records (capture_server) never keep a report's body.
-On, the request goes out once per launch, on the GameSettingRequest reply only (operator, 2026-11-10).
+OFF BY DEFAULT since 2026-11-10. The client can upload its whole log repeatedly (about 22 MB each), so the
+request is deferred until the first home update and sent only once per profile while the server is running.
+Off, the server asks for nothing; an upload the game already has queued is still answered (report state 0)
+but not saved. The per-request records (capture_server) never keep a report's body.
 """
 from __future__ import annotations
 
 import json
 import os
+import threading
 import time
 
 REPORT_BACK_GROUP = "383e98ad"
@@ -37,10 +37,9 @@ REPORT_BACK_HOLD = "da99ba05"
 REPORT_STATE_GROUP = "cd87bd8b"
 REPORT_STATE_VALUE = "950510b8"
 STORE_LOG_REQUEST = "6611dc2f"
-# The reply that carries the request: the first call of every launch, so the game uploads once per launch.
-# Not RoutineHomeUpdateRequest (Daud71Hn): it comes about every 15 seconds, and each reply made the game upload
-# its whole log again (2026-11-10).
-CARRIERS = {"OTX6Fmvu"}   # GameSettingRequest
+CARRIERS = {"Daud71Hn"}   # RoutineHomeUpdateRequest, after login
+_REQUESTED_PROFILES: set[str] = set()
+_REQUESTED_LOCK = threading.Lock()
 
 
 def enabled() -> bool:
@@ -80,20 +79,47 @@ def _save(plaintext) -> str:
     return path
 
 
+def _profile_id(plaintext) -> str | None:
+    try:
+        body = json.loads(plaintext or "")
+    except (TypeError, ValueError):
+        return None
+    rows = body.get("LhVz6aD2") if isinstance(body, dict) else None
+    if isinstance(rows, dict):
+        rows = [rows]
+    if not isinstance(rows, list):
+        return None
+    for row in rows:
+        if isinstance(row, dict) and row.get("9Tbns0eI") not in (None, ""):
+            return str(row["9Tbns0eI"])
+    return None
+
+
 def handle(spec, reply_id, plaintext):
     """Add the report-back request to carrier replies (when on), and answer a log upload (saved when on)."""
+    on = enabled()
+    if not on:
+        with _REQUESTED_LOCK:
+            _REQUESTED_PROFILES.clear()
     if reply_id == STORE_LOG_REQUEST:
         size = len(plaintext or "")
-        if enabled():
+        if on:
             path = _save(plaintext or "")
             print(f"CLIENT REPORT: game uploaded its log ({size} chars) -> {path}", flush=True)
         else:
             print(f"CLIENT REPORT: game uploaded a queued log ({size} chars); not saved "
                   f"(EXVIUS_CLIENT_REPORTS=0)", flush=True)
         return {REPORT_STATE_GROUP: [{REPORT_STATE_VALUE: "0"}]}
-    if not enabled():
+    if not on:
         return spec
     if reply_id in CARRIERS and isinstance(spec, dict):
+        profile_id = _profile_id(plaintext)
+        if profile_id is None:
+            return spec
+        with _REQUESTED_LOCK:
+            if profile_id in _REQUESTED_PROFILES:
+                return spec
+            _REQUESTED_PROFILES.add(profile_id)
         spec = dict(spec)
         # A time in the past: upload as soon as the report scheduler next runs.
         spec[REPORT_BACK_GROUP] = [{REPORT_BACK_TIME: "2020-01-01 00:00:00", REPORT_BACK_HOLD: "0"}]

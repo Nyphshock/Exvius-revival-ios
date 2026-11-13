@@ -260,7 +260,7 @@ docker compose logs -f server
 | The game crashes when the first battle starts | Close it fully and open it again (step 7.2). |
 | A scene has no music | That track hasn't downloaded yet (step 7.3). |
 
-**Logs from the game itself.** iOS hides apps' logs, but the game can upload its own error log to the server. This is off by default, since each upload is tens of MB. While it's on, the game uploads its log once each time you open it. Turn it on when you need a log: set `EXVIUS_CLIENT_REPORTS: "1"` in `docker-compose.yml` (on Unraid, the `EXVIUS_CLIENT_REPORTS` variable in the template), run `docker compose up -d`, open the game and repeat what went wrong, then open the game once more. Each upload is saved in `FFBE_DIR/server/client-reports/`, and the server log shows a `CLIENT REPORT` line when one arrives. Set it back to `"0"` afterwards. To read one:
+**Logs from the game itself.** iOS hides apps' logs, but the game can upload its own error log to the server. This is off by default, since each upload is tens of MB. To enable it, set `EXVIUS_CLIENT_REPORTS: "1"` in `docker-compose.yml` (on Unraid, the `EXVIUS_CLIENT_REPORTS` variable in the template) and run `docker compose up -d`. The server waits until the first `RoutineHomeUpdateRequest` after the Home screen loads, so the report is not requested during login; it requests one report per profile while the server process is running. Reproduce the problem after reaching Home, then reopen the game if it crashed before the queued report could upload. Each received report is saved in `FFBE_DIR/server/client-reports/`, and the server log shows a `CLIENT REPORT` line. Set the option back to `"0"` after collecting it. To read one:
 
 ```bash
 pip install cryptography
