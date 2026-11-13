@@ -6,6 +6,10 @@ Each entry is one update to this repo. To update: in your repo folder run `git p
 
 - The Moogle Guard Captain lists every catalogued exchange with stock for currencies you hold, including exchanges not yet reached by the replay.
 
+## 2026-11-13: Medal exchange descriptions
+
+- Medal exchange products now show an English description of their reward instead of the unresolved `mst_medal_exchange_explain_<id>` key.
+
 ## 2026-11-13: Client reports after login
 
 - Optional heavy client reports are requested after the Home screen loads instead of during login, and only once per profile per server process.

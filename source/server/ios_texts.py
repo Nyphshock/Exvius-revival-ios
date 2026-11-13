@@ -112,7 +112,8 @@ TICKET_LONG = " The summon appears on the Summon screen while you hold this tick
 # 8 = Orbonne Monastery Vaults' exchange added to them (2026-11-10),
 # 9 = the two exchange-store name tables added (2026-11-10, WEEKLY).
 # 10 = Kira's ability names (content/restored_unit_text.json, 2026-11-12).
-GENERATION = 10
+# 11 = medal exchange product explanations (2026-11-13).
+GENERATION = 11
 
 _CACHE: dict = {}
 _JAPANESE = re.compile("[\u3040-\u30ff\u3400-\u9fff]")
@@ -329,12 +330,18 @@ def _shop_products(out: dict) -> None:
     product after its rewards."""
     try:
         from exvius_shop_catalogue import _catalogue
-        _, products, _ = _catalogue(None)
+        _, products, offers = _catalogue(None)
     except Exception as exc:  # noqa: BLE001 -- the other additions still apply
         print(f"[ios-texts] shop product names skipped ({exc})", flush=True)
         return
     for row in products:
         pid, text = str(row["jPV7Xc4N"]), reward_text(row.get("P4puB2ch"))
+        medal = str((offers.get(pid) or {}).get("medal") or "")
+        if medal and text:
+            key = "mst_medal_exchange_explain_" + medal
+            description = "Exchange for " + text + "."
+            _fill(out, "F_TEXT_ITEM_EXPLAIN_SHORT", key, description)
+            _fill(out, "F_TEXT_ITEM_EXPLAIN_LONG", key, description)
         if not text:
             continue
         out["F_TEXT_NV_SHOP_PRODUCT_NAME"]["MST_NVSHOP_PRODUCT_NAME_" + pid] = (_clean(text), True)
