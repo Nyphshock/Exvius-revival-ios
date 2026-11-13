@@ -47,6 +47,15 @@ def _credit(iid, row):
     return True
 
 
+REPORT_CHANNELS = (*CHEST_CHANNELS.values(), 'R1kg3EBA')
+
+
+def reported_tuples(result: dict) -> set:
+    """Every `kind:id:count:switch` the phone reported as opened, from all chest channels."""
+    return {entry for channel in REPORT_CHANNELS
+            for entry in str((result or {}).get(channel) or '').split(',') if entry}
+
+
 def _mission_treasures(out, request):
     nodes = _rows(request, 'jQsE54Iz')
     results = _rows(request, RESULT)
@@ -61,10 +70,10 @@ def _mission_treasures(out, request):
             or not attempt.get('normal_rewards_recorded')):
         return out
     auto_collect = attempt.get('cleared') is True and _is_story_exploration(mid)
-    # GL9 MissionResultRequest serializes opened-chest tuples by reward kind.
-    # R1kg3EBA is retained for the earlier request form used by saved clients.
-    reported = {entry for channel in (*CHEST_CHANNELS.values(), 'R1kg3EBA')
-                for entry in str(results[0].get(channel) or '').split(',') if entry}
+    # Opened-chest tuples arrive per kind (`MissionResultInfoBase::toJsonGroup`, GL): items Z7G0yxXe, equipment
+    # Mh1BA4uv, materia 30u6XYiB, key items 95JxZzuG (CHEST_CHANNELS); R1kg3EBA is also read. Until 2026-11-12
+    # only Z7G0yxXe and R1kg3EBA were read, so equipment, materia and key-item chests opened but never paid.
+    reported = reported_tuples(results[0])
     opened = set(str(nodes[0].get('dIPkNn61') or '').split(','))
     display = {}
     for iid, row in catalogue().items():

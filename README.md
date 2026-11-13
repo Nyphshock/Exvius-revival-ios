@@ -89,7 +89,7 @@ Tailscale split DNS ── only gumi.sg / exvius.com questions ──▶  ffbe (
 - **Its own Tailscale address.** One container, `ffbe`, runs Tailscale (joining your tailnet as a machine called `ffbe`) and the game server together. If either stops, both restart together. Nothing listens on your computer's own ports, so it can't clash with anything else you run.
 - **A tiny DNS responder.** It answers only `gumi.sg` and `exvius.com` names. A Tailscale split-DNS rule sends the phone's lookups for those names to it. Nothing else about your phone's or tailnet's DNS changes.
 - **A private certificate** that can only vouch for `gumi.sg` and `exvius.com` (an X.509 name constraint). You install it on the phone once, and it can't be used for any other site.
-- **The game data** (about 14.6 GB) is downloaded from the Exvius Offline GitHub releases during setup.
+- **The game data** (about 14.6 GB) is downloaded during setup from a copy of Exvius Offline's data hosted with this project.
 
 Everything the stack creates lives in one folder (`FFBE_DIR`). [Removing everything](#removing-everything) is at the end.
 
@@ -287,6 +287,7 @@ The server also keeps a record of each request it received, for three days and a
 | Logs | `docker compose logs -f server` |
 | Stop | `docker compose down` |
 | Unraid | After [moving it to the Docker tab](#unraid-run-it-from-the-docker-tab): start, stop, restart, logs and settings are all on the `ffbe` icon. Commands run inside it with `docker exec ffbe python3 /app/ffbe.py …` (for example `rotation` or `status`) instead of `docker compose exec server …`. |
+| Test the Convert screens | `docker exec ffbe python3 /app/ffbe.py convert-test` (Unraid; with Compose: `docker compose exec server python3 /app/ffbe.py convert-test`). Adds ten units, one of each kind the Convert lists treat differently, and says which list each should be in. A copy of the save from just before is kept in `server/state/backups/`; `convert-test --undo` puts it back (the ten units go, and anything else done since). |
 | Start the game over | `docker compose exec server python3 /app/ffbe.py new-game --yes` (the old save is backed up to `server/state/backups/`) |
 
 **Your save** is in `FFBE_DIR/server/state/`. Back up that folder.
@@ -388,6 +389,9 @@ The container's own log (`docker logs ffbe`) is capped at 60 MB by Docker (3 fil
 | Setting | What it controls |
 | --- | --- |
 | `EXVIUS_REPLAY` | `1` (default) follows Global's history: each week shows the summon sets released in that week's slice of history, the Vortex events that launched with them, and permanent summons and exchange shops limited to units released by then (NV EXVIUS appears with the NV era). The summon screen also keeps every banner from the player's unlocked story seasons available; clearing a season's opening mission unlocks its banners. `0` uses the random weekly rotation below. Only works with `EXVIUS_SUMMON_ROTATION=1`; setting the rotation to `0` turns replay off too. Change it in `docker-compose.yml` (on Unraid, the template's variable), then run `docker compose up -d`. |
+| `EXVIUS_REPLAY_FULL_RUNS` | `1` (default): with the replay on, a banner or event is up in every week whose slice of history overlaps its whole Global run, so long banners (weekly free summons, anniversary campaigns) and events stay for several weeks, and some weeks are busier than others. `0`: each banner shows only in the week its start date falls in, and events open beside the banners released with them. Change it in `docker-compose.yml`, then run `docker compose up -d`. |
+| `EXVIUS_LATE_BANNERS` | `1` (default) adds Global's banners from September 2023 to the end of service (rebuilt from the wiki and Global's news), puts the cached Global banners of that period on their real dates and hides the placeholder records. `0` goes back to the old placeholder dates. |
+| `EXVIUS_LATE_UNCONFIRMED` | `0` (default) leaves out 26 rebuilt 2024 NV Premium Step-Up summons whose existence is only inferred from the 2023 pattern (nothing from Global confirms them). `1` adds them. |
 | `EXVIUS_REPLAY_START` | Where history starts in your first replay week. Default `2016-12-16` (Noctis). |
 | `EXVIUS_REPLAY_PACE` | Historical weeks per real week, with optional changes by date. Default `3,2@2020-08-20`: three, then two from Global's first Neo Vision banner. |
 | `EXVIUS_REPLAY_NV_ERA` | When NV EXVIUS appears among the permanent summons. Default `2020-08-20`. |
@@ -456,6 +460,9 @@ The original game's Lapis income assumed you'd buy Lapis. These settings raise w
 | `EXVIUS_STORY_RECIPES` | `1` (default) pays the recipes the story gave on Global that the game data lost: the crafting tutorial's Bronze Knife recipe (with 3 Copper Ore, after Earth Shrine - Exit, a stand-in point) and the Magic Key recipe (first clear of Grandshelt Castle - Throne Room). Saves already past those points get them by mail once, along with any Farplane Tower of Earth gift (Murasame, Force Armor, Killer Bow, Apollo Harp) whose boss they beat without receiving it. `0` turns both off. List: `ios-server/research/STORY_RECIPES.md`. |
 | `EXVIUS_GUIDE` | `1` (default) fills the Guide (Library): units (with the lower forms of awakened units), items, equipment, materia and Vision Cards you hold or have held, and monsters from battles fought from now on. `0` sends nothing (the Guide stays empty except recipes). |
 | `EXVIUS_ENGLISH_SEARCH` | `1` (default) gives each Vision Card its English name as its search reading, so the Vision Card search finds cards by English name. `0` serves the card table as shipped. |
+| `EXVIUS_SUMMON_ART_GUARD` | `1` (default) makes sure the summon screen only asks for banner images the server has, drawing a stand-in with the summon's name where the art isn't there yet. `0` names the art as before. A missing image is still answered with a drawn picture either way. |
+| `EXVIUS_NV_AWAKENED_FLAG` | `1` (default) tells the game which NV units you got by NV awakening (Dark Fina NV, Lightning NV and the like), so Convert to Fragments lists them. `0` doesn't, and those units are left out of that list again. |
+| `EXVIUS_CHEST_BACKPAY` | `1` (default) mails you, once, the equipment, materia and key items from treasure chests you opened that never arrived (only those the server still has a record of). `0` doesn't send it. |
 | `EXVIUS_LB_EXP` | `1` (default) gives every party unit LB EXP when you clear a quest, as on Global: 100 per stamina point the quest costs (also below rank 51, where quests cost no stamina), 250 per raid orb, 100 per weapon-enhancement orb. Losing or retiring gives none. `0` turns it off (LB EXP then only comes from fusion and Burst Pots). |
 | `EXVIUS_EVENT_CURRENCY_RUNS` | Event currency (King Mog and similar: Mana Mystery's Candy and the rest) drops from the event's enemies, as it did on Global: Global's per-clear amounts (from the FFBE wiki, or Japan's battle data where its enemies already carry it), multiplied so the event's own gear, materia, units and tickets in its exchange take about this many clears of its top quest (never less than Global's own amount). Easier quests drop less, in Global's proportions. Default `30`; `0` gives Global's own amounts. Events where no source says which quests drop the currency still pay it once at the end of each clear instead (list in `ios-server/research/DROP_CHECK.md`). Each exchange is in the Shop's exchange list while its event is in the Vortex or while you hold its currency, with the stock it had at that event's run. |
 | `EXVIUS_FIRST_CLEAR_BACKPAY` | `1` (default) sends one mail, once, with the first-clear rewards of every quest you had already cleared before first-clear rewards were paid (Lapis is multiplied when you receive it). `0` doesn't send it. |
@@ -580,7 +587,7 @@ Nothing else on your computer, network or tailnet is changed.
 
 ## Credits
 
-The game engine, the preserved game data and the original Android app are [Exvius Offline](https://github.com/Elvlin/exvius-offline) by Elvlin. This project adds the iPhone server around it. The game data is downloaded from that project's GitHub releases during setup.
+The game engine, the preserved game data and the original Android app are [Exvius Offline](https://github.com/Elvlin/exvius-offline) by Elvlin. This project adds the iPhone server around it.
 
 Final Fantasy Brave Exvius belongs to Square Enix and gumi. This is an unofficial fan project, not affiliated with either.
 

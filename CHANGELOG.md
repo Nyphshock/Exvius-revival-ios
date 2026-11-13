@@ -9,6 +9,16 @@ Each entry is one update to this repo. To update: in your repo folder run `git p
 - To continue an existing default save or share a save between devices, associate their Tailscale addresses with that profile as explained in the README.
 - Improved Vortex image loading on iPhone, including Orbonne Monastery Vaults. Open the game twice after updating.
 
+## 2026-11-12: Quest, replay and gameplay improvements
+
+- Completed town quests stay completed after restarting, and Quest Report shows ongoing and cleared quests.
+- Historical summons and events now last for their original runs, with more late-game and missing banners. Story-season unlocks still apply.
+- Fixed summon image download errors by showing a temporary image when artwork is not ready.
+- Improved unit conversion to prisms and fragments, including NV-awakened units.
+- Battle results show the EXP actually earned, and used items and item sets are saved correctly.
+- Fixed missing treasure rewards; recoverable unpaid rewards are mailed once. Fixed missing fights in Big Bridge and other explorations.
+- Game data downloads now use the project's new data host; existing installed data and saves are unchanged.
+
 ## 2026-11-12: Summons, LB EXP, Kira and Vision Cards
 
 - The friend point Standard Summon has a 10x button: 10 units for 2,000 friend points.

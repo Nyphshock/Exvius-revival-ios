@@ -114,7 +114,8 @@ from ffbe_pipeline import reply_pipeline, _PIPELINE_PROBLEMS
 # owns the chain so this server and the authoring CLI share ONE implementation; it imports nothing from
 # the server, and `BATTLE_DERIVE=off` makes it a no-op.
 import battle_content
-from offline_menu import STATE_LOCK, status as offline_status, new_game as offline_new_game
+from offline_menu import (STATE_LOCK, status as offline_status, new_game as offline_new_game,
+                          convert_test, convert_test_undo)
 from player_profiles import (PlayerProfileManager, ProfileMapError, UnregisteredClientError)
 from sp_challenge_web import matches as is_sp_challenge_page, page as sp_challenge_details_page
 
@@ -465,6 +466,13 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == '/__exvius/new-game':
             with STATE_LOCK:
                 return self._run_profiled(lambda: self._offline_menu(reset=True))
+        if self.path == '/__exvius/convert-test':
+            with STATE_LOCK:
+                return self._run_profiled(lambda: self._offline_menu(reset=True, action=convert_test))
+        if self.path == '/__exvius/convert-test-undo':
+            with STATE_LOCK:
+                return self._run_profiled(lambda: self._offline_menu(
+                    reset=True, action=lambda state, path: convert_test_undo(state, path, st.STATE_SLOT)))
         if '/actionSymbol/' in self.path:
             length = int(self.headers.get("Content-Length") or 0)
             raw = self.rfile.read(length) if length else b""
@@ -486,7 +494,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._run_profiled(self._offline_menu)
         self._cdn_fetch()
 
-    def _offline_menu(self, reset=False):
+    def _offline_menu(self, reset=False, action=None):
         code = 200
         try:
             if self.client_address[0] not in ('127.0.0.1', '::1'):
@@ -497,7 +505,10 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError('Expected a small JSON confirmation.')
                 if json.loads(self.rfile.read(length)) != {'confirm': True}:
                     raise ValueError('New Game requires confirmation.')
-                result = offline_new_game(State, st.STATE_FILE, st.STATE_SLOT)
+                if action is not None:
+                    result = action(State, st.STATE_FILE)
+                else:
+                    result = offline_new_game(State, st.STATE_FILE, st.STATE_SLOT)
             else:
                 result = offline_status(State, st.STATE_FILE)
         except (ValueError, OSError, PermissionError) as exc:
@@ -786,6 +797,13 @@ class Handler(BaseHTTPRequestHandler):
             if hit:
                 data = open(hit, "rb").read()
                 how = how_art + " (" + os.path.relpath(hit, os.path.dirname(WORK)) + ")"
+        # SUMMON ART NEVER 404s (2026-11-12): a missing summon image failed the summon screen's whole download
+        # and sent the game to the title asking to re-download all data. Answer with a drawn stand-in instead.
+        if data is None and rel and ".." not in rel:
+            import summon_art
+            drawn = summon_art.fallback(rel)
+            if drawn:
+                data, how = drawn
         # LINE ENDINGS. The tables this project rebuilt were written on Windows with CRLF; the Android client's
         # base64 decoder skips the CR, but the iPhone client's does not, and reports LOAD_ERROR_DECODE_FAILED
         # (F_ABILITY_EXPLAIN_MST Ver404, F_LOCALIZED_TEXT_MST Ver710, from its own uploaded log, 2026-11-05).
@@ -808,6 +826,10 @@ class Handler(BaseHTTPRequestHandler):
         verdict = f"200 {n} B ({how})" if data is not None else f"404 ({how or 'not in the CDN root'})"
         print(f"CDN  {self.command} {self.path}  host={self.headers.get('Host')}  "
               f"ua={self.headers.get('User-Agent')}  -> {verdict}", flush=True)
+        if "w5JFGPh3" in self.path:
+            # The Convert screens' table (F_SACRIFICE_MST). One line per request, whatever version it names and
+            # whatever we answer, so a phone test settles whether the phone asks for it (2026-11-12).
+            print(f"CONVERT-TABLE request {self.command} {self.path} -> {verdict}", flush=True)
         try:
             if data is None:
                 self.send_response(404)

@@ -3,13 +3,17 @@ import os
 from pathlib import Path
 import sys
 import tempfile
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
 import event_archive
+import deal_art
 import ios_art
 import ios_tables
+import summon_art
 
 
 class VortexArtVersionTests(unittest.TestCase):
@@ -70,6 +74,45 @@ class VortexArtVersionTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "stop before opening listeners"):
                 server.main()
         self.assertEqual(calls, ["fetch", "build", "tls"])
+
+
+class SummonArtTests(unittest.TestCase):
+    def test_on_demand_and_background_render_share_file_lock(self):
+        started = threading.Event()
+        release = threading.Event()
+        second_render = threading.Event()
+        calls = []
+
+        def render(title, size):
+            calls.append(title)
+            if len(calls) == 1:
+                started.set()
+                if not release.wait(5):
+                    raise TimeoutError("render was not released")
+            else:
+                second_render.set()
+            return b"image"
+
+        target = ("test.png", "", "Test", (640, 160))
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch.object(deal_art, "_targets", return_value=[target]), \
+                patch.object(summon_art, "_targets", return_value={"test.png": target[1:]}), \
+                patch.object(summon_art, "_folder", return_value=tmp), \
+                patch.object(summon_art, "_index", return_value={}), \
+                patch("data_paths.DEAL_ART_ROOT", tmp), \
+                patch.object(deal_art, "render", side_effect=render), \
+                patch.dict(os.environ, {"EXVIUS_DEAL_ART_FETCH": "1"}), \
+                ThreadPoolExecutor(max_workers=2) as pool:
+            first = pool.submit(deal_art.fetch_one, "test.png")
+            self.assertTrue(started.wait(5))
+            second = pool.submit(summon_art.ensure, "test.png")
+            try:
+                self.assertFalse(second_render.wait(0.2))
+            finally:
+                release.set()
+            self.assertEqual(first.result(timeout=5), str(Path(tmp) / "test.png"))
+            self.assertEqual(second.result(timeout=5), "test.png")
+            self.assertEqual(calls, ["Test"])
 
 
 if __name__ == "__main__":

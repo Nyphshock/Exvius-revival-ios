@@ -304,6 +304,11 @@ def all_banners() -> list:
         by_id[str(b["id"])] = b
     for b in raid_banners():
         by_id[str(b["id"])] = b
+    # Global's banners from 2023-08 to the end, rebuilt, and the real dates of the ones we had lumped (late_banners.py).
+    import late_banners
+    for b in late_banners.banners():
+        by_id[str(b["id"])] = b
+    late_banners.apply(by_id)
     # Archive identity merging shows a replacement and its calendar alias once.
     # Keep both IDs resolvable for requests already issued by an older client.
     only = gacha_only_ids()
@@ -612,7 +617,8 @@ def gacha_groups(banners: list) -> dict:
         if b.get('boxes'):
             from gacha_box import detail_id, box_id
             b = dict(b, detail_id=detail_id(State.player, b), box_id=box_id(State.player, b))
-        art = b.get("art") or {}
+        import summon_art
+        art = summon_art.resolve(b, b.get("art") or {})     # only names the phone can download (summon_art.py)
         schedule_art = art  # Keep every step image in the native carousel/download catalogue.
         steps = b.get("steps") or []
         step_index = State.player.gacha_step(b) if steps and State.player else 0

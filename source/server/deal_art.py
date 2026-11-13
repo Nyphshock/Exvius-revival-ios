@@ -31,7 +31,8 @@ def _targets() -> list[tuple[str, str, str, tuple]]:
     """[(file name, url or "", title, size)] for every deal banner image."""
     from ffbe_config import GACHA_DEALS, GACHA_RAIDS
     banners = []
-    for path in (GACHA_DEALS, GACHA_RAIDS):     # the raid summons' titled stand-ins too (2026-11-10)
+    import late_banners
+    for path in (GACHA_DEALS, GACHA_RAIDS, late_banners.PATH):   # raid stand-ins (2026-11-10), late banners (11-12)
         try:
             with open(path, encoding='utf-8') as fh:
                 banners += json.load(fh).get('banners', [])
@@ -163,7 +164,7 @@ def fetch(log=print) -> int:
     os.makedirs(folder, exist_ok=True)
     added = placeholders = failed = 0
     changed = False
-    for name, url, title, size in _targets():
+    for name, url, title, size in sorted(_targets(), key=lambda t: bool(t[1])):
         with _file_lock(name):
             was_added, reachable = _save_target(folder, (name, url, title, size), log)
         changed = changed or was_added
@@ -175,7 +176,8 @@ def fetch(log=print) -> int:
         if not was_added:
             continue
         added += 1
-        time.sleep(0.5)   # be gentle with the Wayback Machine
+        if url:
+            time.sleep(0.5)   # be gentle with the Wayback Machine
     if changed:
         import ffbe_gacha
         ffbe_gacha._BANNER_ART_INDEX.clear()   # rebuilt on the next lookup, now with these files
