@@ -6,6 +6,10 @@ Each entry is one update to this repo. To update: in your repo folder run `git p
 
 - Orbonne Monastery Vaults includes its Vortex image without needing a download from the wiki.
 
+## 2026-11-13: Android sound bank version fallback
+
+- Android requests for sound banks now fall back to the newest available bank with the same filename when the requested `Ver` prefix is missing.
+
 ## 2026-11-13: Android, multiple players and Vortex images
 
 - Android devices can download the server certificate at `http://100.x.y.z/ca.pem`. The README explains how to install it.

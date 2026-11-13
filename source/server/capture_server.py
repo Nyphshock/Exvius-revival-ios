@@ -743,6 +743,22 @@ class Handler(BaseHTTPRequestHandler):
                         how = "token-match " + os.path.basename(hits[0])
                     elif len(hits) > 1:
                         how = f"AMBIGUOUS ({len(hits)} candidates)"
+        # Android receives the same sound-version bump as iOS, but keeps requesting its /android/ path.
+        # Resolve that bumped name to the newest bank with the same basename, without iOS transforms.
+        if data is None and rel.startswith("common_lang/sound/") and "/android/" in "/" + rel \
+                and rel.endswith((".acb", ".awb")) and ".." not in rel:
+            m = re.search(r"Ver\d+_([^/]+)$", rel)
+            if m:
+                for base, label in ((overlay, "overlay Android sound"), (root, "Android sound")):
+                    if not base:
+                        continue
+                    hits = glob.glob(os.path.join(base, os.path.dirname(rel), f"Ver*_{glob.escape(m.group(1))}"))
+                    hits = [path for path in hits if re.match(r"Ver\d+_", os.path.basename(path))]
+                    best = max(hits, key=lambda p: int(re.match(r"Ver(\d+)_", os.path.basename(p)).group(1)),
+                               default=None)
+                    if best:
+                        data, how = open(best, "rb").read(), label + " " + os.path.basename(best)
+                        break
         # PLATFORM FOLDERS. The preserved data is the Android client's cache, which keeps sound under
         # `.../android/`; the iPhone app asks for the same files under `.../ios/`. CRI ACB/AWB banks are
         # the same container format on both, so answer from the Android folder, at whatever version we have.
