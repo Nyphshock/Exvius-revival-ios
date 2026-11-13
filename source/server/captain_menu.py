@@ -11,11 +11,9 @@ Captain stores with stock in Global's tables (F_STORE_ITEM_MST). The Farplane pa
 (`common_lang/sd/map/11/Ver128_211020100.cpk`, rebuilt from the Japanese data with English text) lists 18
 exchanges in a six-page menu; 15 are Japan-only stores with no stock here.
 
-THE MENU (operator, 2026-11-10): every exchange whose currency the player holds and that King Mog or the Mog
-Minister isn't showing this week (`exvius_actions_shops.counter_schedules`): the exchanges of events that have
-ended in the replay, of live events that lost the counter to another event in a busy week, and the Captain's
-own (above) from the dates Global added them. Exchanges of events the replay hasn't reached never show. Live
-events first, then the newest run first. With none, he says so. Each option checks on the phone, when picked,
+THE MENU (operator, 2026-11-13): every catalogued Global exchange with stock whose currency the player holds,
+including stores already shown by King Mog or the Mog Minister and events the replay hasn't reached yet. This
+lets the Farplane serve as a single place for leftover currency. Each option checks on the phone, when picked,
 that the player still holds the currency (the list is fixed for the session; see below) and then opens the
 exchange's own store, the way King Mog's and the Minister's counters do.
 
@@ -119,33 +117,30 @@ def _short(name: str) -> str:
 
 
 def entries(now=None, week=None) -> list:
-    """The exchanges the Captain lists now: [{store, currency, name, live, date}], live first, newest first."""
+    """Owned-currency exchanges: [{store, currency, name, live, date}], live first, newest first."""
     import exvius_actions_shops as shops
     week = week or shops._replay_week(now)
     opened, history = week[0], week[1]
-    shown = {str(row.get("za2xsDj5")) for row in shops.counter_schedules(week=week)}
     held = shops._held()
     towns = shops._table("F_TOWN_STORE_MST", "Z20mNDvL")
     own = {store: (currency, name, day) for store, currency, name, day in OWN}
     out, seen = [], set()
     for store, (currency, name, day) in own.items():
-        if day < history and held.get(currency) and store not in shown:
+        if held.get(currency):
             out.append({"store": store, "currency": currency, "name": name, "live": False, "date": day})
             seen.add(store)
     runs = shops._area_runs()
     for ex in shops._event_exchanges().get("exchanges", []):
         store, currency = str(ex["store"]), str(ex["currency"])
-        if store in seen or store in own or store in shown or not held.get(currency) or not ex.get("rows"):
+        if store in seen or store in own or not held.get(currency) or not ex.get("rows"):
             continue
         if (towns.get(store) or {}).get("kaG4xf3I") != "5":
             continue
         areas = [str(a) for a in ex.get("event_areas") or []]
         live = [opened[a] for a in areas if a in opened]
         ran = [r for a in areas for r in runs.get(a, []) if r < history]
-        if not (live or ran):
-            continue      # the replay hasn't reached this event yet
         out.append({"store": store, "currency": currency, "name": _short(ex.get("name") or store),
-                    "live": bool(live), "date": max(live + ran)})
+                    "live": bool(live), "date": max(live + ran or [str(ex.get("first_run") or "")])})
         seen.add(store)
     out.sort(key=lambda e: (e["live"], e["date"], e["store"]), reverse=True)
     return out[:MAX_ENTRIES]
