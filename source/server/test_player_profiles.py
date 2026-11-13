@@ -98,11 +98,55 @@ class PlayerProfileTests(unittest.TestCase):
         self.assertEqual(loaded, ["100000002"])
         self.assertEqual(st.STATE_FILE, "default.json")
 
-    def test_unmapped_peer_is_denied(self):
+    def test_unknown_peers_are_registered_and_keep_their_ids_after_restart(self):
+        manager = player_profiles.PlayerProfileManager(auto_create=True)
+
+        def fake_load_state():
+            st.State.player = _Player(st.STATE_SLOT)
+            st.State.state_dirty = False
+
+        with patch.object(player_profiles, "load_state", side_effect=fake_load_state), \
+                patch.object(player_profiles, "save_state"):
+            with manager.activate("127.0.0.1") as player_id:
+                self.assertEqual(player_id, "100000001")
+            for address, expected in (("100.64.0.99", "300000001"),
+                                      ("100.64.0.100", "300000002"),
+                                      ("100.64.0.99", "300000001")):
+                with manager.activate(address) as player_id:
+                    self.assertEqual(player_id, expected)
+                    self.assertEqual(st.State.player.data["identity"]["user_id"], expected)
+            profile_map = json.loads((self.state_dir / "profiles.json").read_text(encoding="utf-8"))
+            self.assertEqual(profile_map["default_player_id"], "100000001")
+            self.assertEqual(profile_map["clients"], {
+                "100.64.0.99": "300000001", "100.64.0.100": "300000002"})
+            manager = player_profiles.PlayerProfileManager(auto_create=True)
+            with manager.activate("100.64.0.99") as player_id:
+                self.assertEqual(player_id, "300000001")
+
+    def test_new_ids_skip_existing_mappings_and_orphan_saves(self):
         manager = self._manager()
-        with self.assertRaises(player_profiles.UnregisteredClientError):
-            with manager.activate("100.64.0.99"):
-                self.fail("unmapped peer must not enter a profile")
+        manager._clients["100.64.0.3"] = "300000001"
+        manager._clients["100.64.0.4"] = "999999999"
+        profile_dir = self.state_dir / "profiles"
+        profile_dir.mkdir()
+        (profile_dir / "300000002.json").write_text("{}", encoding="utf-8")
+        self.assertEqual(manager._next_player_id(), "300000003")
+
+    def test_removed_mapping_gets_new_id_without_reusing_orphan_save(self):
+        manager = self._manager()
+        profile_dir = self.state_dir / "profiles"
+        profile_dir.mkdir()
+        (profile_dir / "300000001.json").write_text("{}", encoding="utf-8")
+
+        def fake_load_state():
+            st.State.player = _Player(st.STATE_SLOT)
+            st.State.state_dirty = False
+
+        with patch.object(player_profiles, "load_state", side_effect=fake_load_state), \
+                patch.object(player_profiles, "save_state"):
+            with manager.activate("100.64.0.99") as player_id:
+                self.assertEqual(player_id, "300000002")
+            self.assertTrue((profile_dir / "300000001.json").exists())
 
     def test_unknown_client_registers_named_profile_on_create_user(self):
         manager = self._manager()
@@ -114,12 +158,12 @@ class PlayerProfileTests(unittest.TestCase):
         with patch.object(player_profiles, "load_state", side_effect=fake_load_state), \
                 patch.object(player_profiles, "save_state"):
             with manager.activate("100.64.0.99", registration_name="Player Two"):
-                self.assertEqual(st.PROFILE_ID, "100000003")
+                self.assertEqual(st.PROFILE_ID, "300000001")
                 self.assertEqual(st.State.player.data["identity"]["handle_name"], "Player Two")
             profile_map = json.loads((self.state_dir / "profiles.json").read_text(encoding="utf-8"))
-            self.assertEqual(profile_map["clients"]["100.64.0.99"], "100000003")
+            self.assertEqual(profile_map["clients"]["100.64.0.99"], "300000001")
             with manager.activate("100.64.0.99"):
-                self.assertEqual(st.PROFILE_ID, "100000003")
+                self.assertEqual(st.PROFILE_ID, "300000001")
                 self.assertEqual(st.State.player.data["identity"]["handle_name"], "Player Two")
 
     def test_registration_rejects_empty_or_nonprintable_names(self):
@@ -164,6 +208,10 @@ class PlayerProfileTests(unittest.TestCase):
         with manager.activate("100.64.0.99") as player_id:
             self.assertIsNone(player_id)
         self.assertFalse(manager.enabled)
+
+    def test_auto_create_does_not_replace_missing_explicit_map(self):
+        with self.assertRaises(player_profiles.ProfileMapError):
+            player_profiles.PlayerProfileManager(str(self.state_dir / "missing.json"), auto_create=True)
 
 
 if __name__ == "__main__":

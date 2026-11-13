@@ -63,9 +63,10 @@ def validate_profile_map(raw: object) -> tuple[str, dict[str, str]]:
 
 
 class PlayerProfileManager:
-    def __init__(self, path: str | None = None):
+    def __init__(self, path: str | None = None, *, auto_create: bool = False):
         self.path = os.path.abspath(path or os.path.join(data_paths.STATE_DIR, "profiles.json"))
         self._required = bool(path)
+        self._auto_create = auto_create
         self._mtime_ns: int | None = None
         self._default_id: str | None = None
         self._clients: dict[str, str] = {}
@@ -86,6 +87,9 @@ class PlayerProfileManager:
             stat = os.stat(self.path)
         except FileNotFoundError as exc:
             if not self._enabled and not self._required:
+                if self._auto_create:
+                    self._create_default_map()
+                    self._reload()
                 return
             raise ProfileMapError(f"profile map is unavailable: {self.path}") from exc
         except OSError as exc:
@@ -113,6 +117,27 @@ class PlayerProfileManager:
         self._mtime_ns = stat.st_mtime_ns
         self._enabled = True
         print(f"profiles: {len(clients)} Tailscale address(es) mapped; default player {default_id}", flush=True)
+
+    def _create_default_map(self) -> None:
+        default_id = _player_id(
+            str((st.State.player.data.get("identity") or {}).get("user_id", "")),
+            "loaded save's player ID")
+        try:
+            os.makedirs(os.path.dirname(self.path), exist_ok=True)
+        except OSError as exc:
+            raise ProfileMapError(f"cannot create profile map directory for {self.path}: {exc}") from exc
+        try:
+            fh = open(self.path, "x", encoding="utf-8")
+        except FileExistsError:
+            return
+        except OSError as exc:
+            raise ProfileMapError(f"cannot create profile map {self.path}: {exc}") from exc
+        try:
+            with fh:
+                json.dump({"version": 1, "default_player_id": default_id, "clients": {}}, fh, indent=2)
+                fh.write("\n")
+        except OSError as exc:
+            raise ProfileMapError(f"cannot create profile map {self.path}: {exc}") from exc
 
     @staticmethod
     def _snapshot() -> _ProfileState:
@@ -167,10 +192,11 @@ class PlayerProfileManager:
         except OSError as exc:
             raise ProfileMapError(f"cannot inspect profile saves {profile_dir}: {exc}") from exc
         used.update(name[:-5] for name in filenames if name.endswith(".json"))
-        numeric = [int(value) for value in used if value and value.isascii() and value.isdigit()]
-        candidate = max(numeric, default=100000000) + 1
-        while str(candidate) in used or os.path.exists(os.path.join(profile_dir, f"{candidate}.json")):
+        candidate = 300000001
+        while str(candidate) in used:
             candidate += 1
+        if candidate > 300999999:
+            raise ProfileMapError("automatic player ID range 300000001-300999999 is exhausted")
         return str(candidate)
 
     def _save_client_map(self) -> None:

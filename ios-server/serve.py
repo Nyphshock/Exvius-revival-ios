@@ -97,7 +97,7 @@ def configure_engine() -> None:
 
 def start_engine():
     import capture_server
-    result = capture_server.main(['--data', str(ROOT), '--state', SLOT], in_process=True)
+    result = capture_server.main(['--data', str(ROOT), '--state', SLOT, '--auto-profile-map'], in_process=True)
     if result != 0:
         log(f'engine initialisation failed ({result})')
         sys.exit(3)

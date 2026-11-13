@@ -4,6 +4,8 @@
 
 Il sistema ora supporta l'**auto-registrazione automatica** per i nuovi dispositivi. Quando un nuovo IP di Tailscale si connette al server, viene automaticamente assegnato un ID profilo unico senza richiedere configurazione manuale.
 
+Il server iOS crea `profiles.json` se manca. I nuovi ID partono da `300000001`; i mapping esistenti non vengono modificati. Il salvataggio predefinito resta disponibile, ma per usarlo da un dispositivo occorre associare manualmente il suo IP a `default_player_id`. Fai un backup di `server/state/` prima di modificare i mapping.
+
 ## Flusso di Funzionamento
 
 ### Primo Accesso da un Nuovo Dispositivo
@@ -16,7 +18,7 @@ Il sistema ora supporta l'**auto-registrazione automatica** per i nuovi disposit
 3. Server crea un file di profilo vuoto: /state/profiles/{player_id}.json
          ↓
 4. Server salva il mapping nel profiles.json:
-   "100.x.y.z": "100000002"  (nuovo IP → nuovo ID)
+   "100.x.y.z": "300000001"  (nuovo IP → nuovo ID)
          ↓
 5. Gioco carica il profilo vuoto
          ↓
@@ -40,9 +42,9 @@ Il sistema ora supporta l'**auto-registrazione automatica** per i nuovi disposit
 1. Stesso dispositivo (IP già mappato) si connette
          ↓
 2. Server legge profiles.json, trova il mapping:
-   "100.x.y.z" → "100000002"
+   "100.x.y.z" → "300000001"
          ↓
-3. Server carica il profilo esistente: /state/profiles/100000002.json
+3. Server carica il profilo esistente: /state/profiles/300000001.json
          ↓
 4. Giocatore torna al suo save, allo stesso punto dove l'ha lasciato
 ```
@@ -77,8 +79,8 @@ L'utente doveva:
   "default_player_id": "100000001",
   "clients": {
     "100.64.123.45": "100000001",
-    "100.64.123.46": "100000002",      // Auto-aggiunto al primo accesso
-    "100.65.200.10": "100000003"       // Auto-aggiunto al primo accesso
+    "100.64.123.46": "300000001",
+    "100.65.200.10": "300000002"
   }
 }
 ```
@@ -122,30 +124,18 @@ if player_id is None:
 - Prima: Lanciava `UnregisteredClientError` se l'IP non era mappato
 - Dopo: Chiama `_auto_register_client()` per creare automaticamente il mapping
 
-#### Metodo Modificato: `_register_client()`
-```python
-existing_player_id = self._clients.get(address)
-if existing_player_id:
-    # Aggiorna il profilo auto-registrato con il nome
-    profile.player.data["identity"]["handle_name"] = handle_name.strip()
-    return existing_player_id
-```
-
-**Cosa cambia:**
-- Verifica se l'indirizzo è già mappato (auto-registrato)
-- Se sì, aggiorna solo il nome del profilo esistente
-- Se no, crea un nuovo mapping come prima
+Se la prima richiesta del dispositivo è `CreateUserRequest`, `_register_client()` crea direttamente il profilo con il nome scelto. Per un dispositivo già registrato, la richiesta viene gestita usando il profilo associato.
 
 ## Log del Server
 
 ### Auto-Registrazione
 ```
-[ios-server] profiles: auto-registered 100.64.123.46 as player 100000002 (awaiting player name)
+[ios-server] profiles: auto-registered 100.64.123.46 as player 300000001 (awaiting player name)
 ```
 
-### Nome Impostato
+### Registrazione con Nome
 ```
-[ios-server] profiles: 100.64.123.46 named their profile 'Mio Nome' (player 100000002)
+[ios-server] profiles: registered 100.64.123.46 as player 300000001 ('Mio Nome')
 ```
 
 ## Profili Separati - Conferma
@@ -153,14 +143,14 @@ if existing_player_id:
 Ogni dispositivo ha:
 
 ✅ **File di Save Separato**
-- Device A → `/state/profiles/100000001.json`
-- Device B → `/state/profiles/100000002.json`
-- Device C → `/state/profiles/100000003.json`
+- Salvataggio predefinito → slot preesistente
+- Device B → `/state/profiles/300000001.json`
+- Device C → `/state/profiles/300000002.json`
 
 ✅ **Identità Univoca**
 - Device A → `identity.user_id = "100000001"`
-- Device B → `identity.user_id = "100000002"`
-- Device C → `identity.user_id = "100000003"`
+- Device B → `identity.user_id = "300000001"`
+- Device C → `identity.user_id = "300000002"`
 
 ✅ **Progress Totalmente Separato**
 - Denaro/Lapis
@@ -193,13 +183,14 @@ Se necessario, l'utente può ancora:
 3. Aggiungere/rimuovere dispositivi
 
 Il server ricaricherà il file `profiles.json` automaticamente al prossimo accesso (polling ogni richiesta).
+Se rimuovi un mapping, al prossimo accesso quell'IP riceve un nuovo profilo: il vecchio salvataggio non viene cancellato e si può recuperare ripristinando il mapping. L'identificazione avviene tramite l'IP visto dal server, non tramite autenticazione: dispositivi dietro lo stesso proxy o indirizzo non sono distinguibili e le connessioni loopback usano il salvataggio predefinito.
 
 ## Scenari di Utilizzo
 
 ### Scenario 1: Famiglia con più device
 - Papà con iPhone → ID 100000001 → Profilo Papà
-- Mamma con Android → ID 100000002 → Profilo Mamma
-- Figlio con iPad → ID 100000003 → Profilo Figlio
+- Mamma con Android → ID 300000001 → Profilo Mamma
+- Figlio con iPad → ID 300000002 → Profilo Figlio
 
 Tutto automatico! Niente configurazione manuale.
 
@@ -209,15 +200,15 @@ Tutto automatico! Niente configurazione manuale.
 - Android
 
 Stesso utente accede da 3 device:
-1. Crea profilo da iPhone → auto-registrato come 100000002
-2. Accede da Android → auto-registrato come 100000003
+1. Crea profilo da iPhone → auto-registrato come 300000001
+2. Accede da Android → auto-registrato come 300000002
 3. Modifica `profiles.json` per puntare entrambi allo stesso ID se vuole sincronizzare
 
 ```json
 {
   "clients": {
-    "100.64.123.45": "100000002",
-    "100.65.200.10": "100000002"     // Stesso profilo
+    "100.64.123.45": "300000001",
+    "100.65.200.10": "300000001"
   }
 }
 ```

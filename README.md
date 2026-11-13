@@ -293,7 +293,9 @@ The server also keeps a record of each request it received, for three days and a
 
 ### Multiple players on the same Tailscale server
 
-The server automatically assigns each device its own separate save with a unique player ID. When a new device connects for the first time, it's instantly recognized and gets its own profile—no manual configuration needed.
+The server automatically assigns each new device its own separate save and player ID, starting at `300000001`. It creates `profiles.json` if needed and associates each device's IP address with its profile. Existing mappings and saves are not changed.
+
+The existing default save remains available, but a device is not automatically associated with it. To continue that save, map the device's Tailscale IP to `default_player_id` as shown below. Back up `FFBE_DIR/server/state/` before editing the map.
 
 #### How it works
 
@@ -303,9 +305,9 @@ The server automatically assigns each device its own separate save with a unique
 
 #### Example: Three players
 
-- Your iPhone connects → automatically gets player ID `100000002` → enters the game with a blank profile
-- Your Android connects → automatically gets player ID `100000003` → separate save
-- Your friend's iPad connects → automatically gets player ID `100000004` → another separate save
+- Your iPhone connects → automatically gets player ID `300000001` → enters the game with a new profile
+- Your Android connects → automatically gets player ID `300000002` → separate save
+- Your friend's iPad connects → automatically gets player ID `300000003` → another separate save
 
 All without editing any files. Each device has completely separate progress: lapis, units, quests, levels—everything.
 
@@ -318,8 +320,8 @@ If you want the same save on multiple devices (e.g., play on iPhone, continue on
   "version": 1,
   "default_player_id": "100000001",
   "clients": {
-    "100.64.123.45": "100000002",
-    "100.65.200.10": "100000002"
+    "100.64.123.45": "300000001",
+    "100.65.200.10": "300000001"
   }
 }
 ```
@@ -342,6 +344,8 @@ If you need to set up specific mappings before the first login, create `FFBE_DIR
 
 - `default_player_id`: must match your existing save's `identity.user_id`
 - `clients`: map of Tailscale IPs to player IDs
+- If a device's mapping is removed, its next connection creates a new profile; the old save is not deleted. Restore the mapping to return to the old profile.
+- Profiles are selected by the peer IP seen by the server, not by an authenticated user identity. Devices behind the same proxy or address cannot be distinguished; loopback connections use the default save.
 
 This separates player progress and the battle data carried between requests. It does not yet turn
 friend requests into interactions between real server profiles; that requires a shared friend directory

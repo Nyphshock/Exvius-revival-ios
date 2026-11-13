@@ -988,6 +988,8 @@ def main(argv=None, *, in_process=False) -> int:
                     help="explicit path for the server's own state (also STATE_FILE env); `--wipe` deletes it")
     ap.add_argument("--profile-map", default=os.environ.get("FFBE_PROFILE_MAP"),
                     help="JSON file mapping Tailscale peer IP addresses to player IDs")
+    ap.add_argument("--auto-profile-map", action="store_true",
+                    help="create the default profile map when missing and register unknown peers")
     ap.add_argument("--state", default=None,
                     help="named slot to load: out/state/<name>.json (schema §1.1)")
     ap.add_argument("--state-mode", default=os.environ.get("STATE_MODE", "live"),
@@ -1300,7 +1302,7 @@ def main(argv=None, *, in_process=False) -> int:
           f"{list(SWITCH_BASE_INDICES) if SWITCH_BASE_INDICES else 'NONE - nothing pre-granted'}", flush=True)
 
     try:
-        PROFILE_MANAGER = PlayerProfileManager(args.profile_map)
+        PROFILE_MANAGER = PlayerProfileManager(args.profile_map, auto_create=args.auto_profile_map)
     except ProfileMapError as exc:
         raise SystemExit(f"profile map: {exc}") from exc
 
