@@ -2,6 +2,13 @@
 
 Each entry is one update to this repo. To update: in your repo folder run `git pull`, then from `ios-server` run `docker compose build && docker compose up -d`. Your save isn't touched. Open the game twice afterwards so it picks up the new data.
 
+## 2026-11-13: Android, multiple players and Vortex images
+
+- Android devices can download the server certificate at `http://100.x.y.z/ca.pem`. The README explains how to install it.
+- New devices connecting to the server automatically get their own save and a player ID starting at `300000001`. Existing profiles and device associations stay unchanged.
+- To continue an existing default save or share a save between devices, associate their Tailscale addresses with that profile as explained in the README.
+- Improved Vortex image loading on iPhone, including Orbonne Monastery Vaults. Open the game twice after updating.
+
 ## 2026-11-12: Summons, LB EXP, Kira and Vision Cards
 
 - The friend point Standard Summon has a 10x button: 10 units for 2,000 friend points.

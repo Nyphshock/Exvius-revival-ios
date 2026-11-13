@@ -359,14 +359,11 @@ def main() -> int:
     import certs
     paths = certs.ensure(ROOT / 'certs')
     capture_server = start_engine()
-    # Build the iPhone's Vortex banner pack now (a few seconds, cached in server-root/ios-cache), rather than
-    # during the first login that asks for it. See source/server/ios_art.py.
-    def build_art():
-        import event_archive
-        import ios_tables
-        event_archive.fetch_added_art(log=log)   # banners of events added by event_history.json (once)
-        ios_tables.art()
-    threading.Thread(target=build_art, name='ios-art', daemon=True).start()
+    # Finish fetching and packing banners before accepting logins, so tiles cannot name unpacked art.
+    import event_archive
+    import ios_tables
+    event_archive.fetch_added_art(log=log)
+    ios_tables.art()
 
     def fetch_deal_art():
         import deal_art

@@ -25,6 +25,7 @@ import os
 import re
 import struct
 import threading
+import time
 
 PACK = "spdungeon1.cpk"
 RESOURCE_ID = "6108101"
@@ -34,6 +35,7 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 _LOCK = threading.Lock()
 _CACHE: dict = {}
 BUILDER = "2"                  # change to rebuild every cached pack (2: header FileSize/TotalDataSize set)
+VERSION_BASE = 20000
 
 
 def enabled() -> bool:
@@ -196,8 +198,16 @@ def plan(*roots):
 
 def bump(*roots) -> int:
     """Added to the pack's English version. 0 when the pack is not rebuilt."""
-    p = plan(*roots)
-    return 1000 + int(p[2], 16) % 1000 if p else 0
+    built = built_pack(cache_dir(), *roots)
+    if not built:
+        return 0
+    src = source_pack(*roots)
+    if not src:
+        raise FileNotFoundError("Vortex source pack disappeared after rebuilding")
+    match = re.search(r"Ver(\d+)_", os.path.basename(src))
+    if not match:
+        raise ValueError(f"Vortex source pack has no version: {src}")
+    return built[1] - int(match.group(1))
 
 
 def build(src: str, adds, out_path: str) -> dict:
@@ -295,13 +305,13 @@ def build(src: str, adds, out_path: str) -> dict:
 
 def built_pack(cache_dir: str, *roots) -> tuple[str, int, int] | None:
     """(path, version, size) of the rebuilt pack, building it once. None when not rebuilt."""
-    p = plan(*roots)
-    if not p:
-        return None
-    src, adds, signature = p
-    base = int(re.search(r"Ver(\d+)_", os.path.basename(src)).group(1))
-    path = os.path.join(cache_dir, f"{PACK[:-4]}-{signature}.cpk")
     with _LOCK:
+        p = plan(*roots)
+        if not p:
+            return None
+        src, adds, signature = p
+        base = int(re.search(r"Ver(\d+)_", os.path.basename(src)).group(1))
+        path = os.path.join(cache_dir, f"{PACK[:-4]}-{signature}.cpk")
         if not os.path.isfile(path):
             info = build(src, adds, path)
             for old in glob.glob(os.path.join(cache_dir, f"{PACK[:-4]}-*.cpk")):
@@ -309,7 +319,23 @@ def built_pack(cache_dir: str, *roots) -> tuple[str, int, int] | None:
                     os.remove(old)   # packs built under an older setting
             print(f"[ios-art] built {os.path.basename(path)}: {info['files']} files, {info['added']} archive "
                   f"banners added, {info['size']} bytes", flush=True)
-    return path, base + 1000 + int(signature, 16) % 1000, os.path.getsize(path)
+        state_path = os.path.join(cache_dir, "vortex_art.json")
+        try:
+            with open(state_path, encoding="utf-8") as fh:
+                state = json.load(fh)
+        except FileNotFoundError:
+            state = {"signature": "", "revision": 0}
+        if (not isinstance(state, dict) or not isinstance(state.get("signature"), str)
+                or type(state.get("revision")) is not int or state["revision"] < 0):
+            raise ValueError(f"invalid Vortex art revision state: {state_path}")
+        if state["signature"] != signature:
+            hours = int((time.time() - 1767225600) // 3600)
+            state = {"signature": signature, "revision": max(state["revision"] + 1, base + 1, hours)}
+            os.makedirs(cache_dir, exist_ok=True)
+            with open(state_path + ".tmp", "w", encoding="utf-8") as fh:
+                json.dump(state, fh)
+            os.replace(state_path + ".tmp", state_path)
+        return path, VERSION_BASE + state["revision"], os.path.getsize(path)
 
 
 _PATH = re.compile(r"(^|/)en/sd/area/Ver(\d+)_" + re.escape(PACK) + r"$")

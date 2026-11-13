@@ -231,25 +231,19 @@ def art(*roots):
         return None
 
 
-def _art_signature(*roots) -> str:
-    a = art(*roots)
-    return f"art={a[1]}:{a[2]}" if a else ""
-
-
 def table_bump(spec, *roots) -> int:
     import sound_compat
     if spec == RESOURCE_VERSION:
-        # Kept above the sound-only bump (1000-1999) that phones may already hold: a table advertised at a
-        # LOWER version than the phone's copy may never be fetched again.
-        art_sig = _art_signature(*roots)
-        return sound_bump() + (2000 + zlib.crc32(art_sig.encode()) % 1000 if art_sig else 0)
+        built = art(*roots)
+        return sound_bump() + (built[1] if built else 0)
     if spec == RESOURCE_MAP_VERSION:
         import story_text, captain_menu
         # Kept above the sound-only bump (1000-1999) and the story-fix bumps that phones may already hold.
         # The Captain's menu adds its revision, which only ever goes up (captain_menu.refresh).
         return sound_bump() + story_text.table_offset() + captain_menu.table_bump()
     if spec == RESOURCE_CHECKSUM:
-        return _bump(_art_signature(*roots))
+        built = art(*roots)
+        return built[1] if built else 0
     if spec == QUEST:
         return 1000 if quest_rewards_shown() else 0
     if spec == URL:
