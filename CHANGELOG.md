@@ -2,6 +2,10 @@
 
 Each entry is one update to this repo. To update: in your repo folder run `git pull`, then from `ios-server` run `docker compose build && docker compose up -d`. Your save isn't touched. Open the game twice afterwards so it picks up the new data.
 
+## 2026-11-13: Orbonne Vortex image
+
+- Orbonne Monastery Vaults includes its Vortex image without needing a download from the wiki.
+
 ## 2026-11-13: Android, multiple players and Vortex images
 
 - Android devices can download the server certificate at `http://100.x.y.z/ca.pem`. The README explains how to install it.

@@ -3046,6 +3046,8 @@ def event_gate_art(area):
         # Events added by event_history.json: their banner once it is on disk (event_archive.added_art).
         from event_archive import added_art
         name = added_art(area)
+    if name is None and str(area) == '703':
+        name = 'spd_bn_list_FFT.png'
     return name
 
 

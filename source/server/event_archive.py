@@ -503,7 +503,7 @@ def added_art(area):
 
 
 def fetch_added_art(log=print):
-    """Download each added event's banner from the wiki into en/sd/area/ (once), as a 640x240 PNG."""
+    """Install bundled or downloaded event banners into en/sd/area/ as 640x240 PNGs."""
     import io
     import os
     import urllib.request
@@ -513,13 +513,19 @@ def fetch_added_art(log=print):
     fetched = 0
     for row in history().get('added', []):
         path = os.path.join(folder, row['filename'])
-        if os.path.isfile(path) or not row.get('art_url'):
+        if os.path.isfile(path):
+            continue
+        bundled = Path(__file__).parent / 'assets' / 'event_art' / row['filename']
+        if not bundled.is_file() and not row.get('art_url'):
             continue
         try:
-            req = urllib.request.Request(row['art_url'] + '?format=original',
-                                         headers={'User-Agent': 'Mozilla/5.0 (ExviusOffline event art)'})
-            with urllib.request.urlopen(req, timeout=20) as resp:
-                data = resp.read()
+            if bundled.is_file():
+                data = bundled.read_bytes()
+            else:
+                req = urllib.request.Request(row['art_url'] + '?format=original',
+                                             headers={'User-Agent': 'Mozilla/5.0 (ExviusOffline event art)'})
+                with urllib.request.urlopen(req, timeout=20) as resp:
+                    data = resp.read()
             if data[:8] != b'\x89PNG\r\n\x1a\n' or data[16:24] != (640).to_bytes(4, 'big') + (240).to_bytes(4, 'big'):
                 from PIL import Image
                 image = Image.open(io.BytesIO(data)).convert('RGBA').resize((640, 240))
@@ -534,7 +540,7 @@ def fetch_added_art(log=print):
         os.replace(path + '.tmp', path)
         fetched += 1
     if fetched:
-        log(f'EVENT-ART downloaded {fetched} event banner(s) into {folder}')
+        log(f'EVENT-ART installed {fetched} event banner(s) into {folder}')
     return fetched
 
 

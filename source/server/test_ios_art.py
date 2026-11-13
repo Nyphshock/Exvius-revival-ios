@@ -1,4 +1,5 @@
 import importlib.util
+import io
 import os
 from pathlib import Path
 import sys
@@ -11,12 +12,54 @@ from unittest.mock import patch
 
 import event_archive
 import deal_art
+import ffbe_player
 import ios_art
 import ios_tables
 import summon_art
 
 
 class VortexArtVersionTests(unittest.TestCase):
+    def test_bundled_orbonne_banner_is_installed_without_a_download(self):
+        row = next(row for row in event_archive.history()["added"] if str(row["area"]) == "703")
+        bundled = Path(__file__).parent / "assets" / "event_art" / row["filename"]
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp) / "en" / "sd" / "area"
+            folder.mkdir(parents=True)
+            (folder / "Ver5_spdungeon1.cpk").write_bytes(b"source")
+            with patch.object(event_archive, "_art_folder", return_value=str(folder)), \
+                    patch.object(event_archive, "history", return_value={"added": [row]}), \
+                    patch("urllib.request.urlopen", side_effect=AssertionError("unexpected download")):
+                target = folder / row["filename"]
+                self.assertEqual(event_archive.fetch_added_art(log=lambda message: None), 1)
+                self.assertEqual(target.read_bytes(), bundled.read_bytes())
+                self.assertEqual(event_archive.added_art("703"), row["filename"])
+                with patch.object(ios_art, "enabled", return_value=True):
+                    _, additions, _ = ios_art.plan(tmp)
+                self.assertIn((row["filename"], str(target)), additions)
+                target.write_bytes(b"existing custom banner")
+                self.assertEqual(event_archive.fetch_added_art(log=lambda message: None), 0)
+                self.assertEqual(target.read_bytes(), b"existing custom banner")
+
+    def test_unbundled_event_banner_is_still_downloaded(self):
+        image = (Path(__file__).parent / "assets" / "event_art" / "event_703.png").read_bytes()
+        row = {"area": "test", "name": "Test", "filename": "event_test.png",
+               "art_url": "https://example.invalid/banner.png"}
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch.object(event_archive, "_art_folder", return_value=tmp), \
+                patch.object(event_archive, "history", return_value={"added": [row]}), \
+                patch("urllib.request.urlopen", return_value=io.BytesIO(image)) as download:
+            self.assertEqual(event_archive.fetch_added_art(log=lambda message: None), 1)
+            self.assertEqual((Path(tmp) / row["filename"]).read_bytes(), image)
+            self.assertEqual(download.call_count, 1)
+
+    def test_orbonne_uses_shipped_banner_when_download_is_missing(self):
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch.object(event_archive, "_art_folder", return_value=tmp), \
+                patch.object(ffbe_player, "_EVENT_GATE_ART_CACHE", {"other": {}}):
+            self.assertEqual(ffbe_player.event_gate_art("703"), "spd_bn_list_FFT.png")
+            (Path(tmp) / "event_703.png").write_bytes(b"downloaded image")
+            self.assertEqual(ffbe_player.event_gate_art("703"), "event_703.png")
+
     def test_changed_banners_get_higher_persistent_pack_and_table_versions(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "data"
