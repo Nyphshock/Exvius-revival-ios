@@ -192,8 +192,9 @@ class FriendNetworkTests(unittest.TestCase):
                 patch.object(ffbe_friends, "_suggestion_rows", return_value=[]):
             reply = ffbe_friends.serve_friends({}, ffbe_friends.REINFORCE_REPLY)
 
-        self.assertEqual(reply[ffbe_friends.REINFORCE_TAG], [
+        self.assertEqual(reply[ffbe_friends.REINFORCE_CLEAR_TAG], [
             {"m3Wghr1j": "300000002", "og2GHy49": "unit-lead"}])
+        self.assertNotIn(ffbe_friends.REINFORCE_TAG, reply)
         self.assertEqual(reply[ffbe_friends.FRIENDLIST_TAG], [
             {"m3Wghr1j": "300000002", "8zE6w9RP": "0"}])
 
@@ -215,7 +216,7 @@ class FriendNetworkTests(unittest.TestCase):
             for tab in range(1, 6):
                 request = json.dumps({"I53AVzSo": [{"Y58ENcB4": str(tab)}]})
                 reply = ffbe_friends.serve_friends({}, ffbe_friends.REINFORCE_REPLY, request)
-                rows = reply[ffbe_friends.REINFORCE_TAG]
+                rows = reply[ffbe_friends.REINFORCE_CLEAR_TAG]
                 self.assertEqual(len(rows), 1)
                 self.assertEqual(rows[0]["Y58ENcB4"], str(tab))
 

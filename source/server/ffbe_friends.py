@@ -27,7 +27,8 @@ from player_state import (STAT_TOKENS, TEAM_NEED_EXP, UNIT_KEY, beast_stats, uni
 
 REINFORCE_REPLY = "AJhnI37s"    # GetReinforcementInfoRequest
 FRIENDLIST_REPLY = "u7Id4bMg"   # FriendListRequest
-REINFORCE_TAG = "9Tp2fiyB"      # ReinforcementResponse, the NON-clearing tag (pzf5se6V empties it)
+REINFORCE_TAG = "9Tp2fiyB"      # ReinforcementResponse, non-clearing delta
+REINFORCE_CLEAR_TAG = "pzf5se6V"  # ReinforcementResponse, clears then repopulates the support list
 FRIENDINFO_TAG = "I53AVzSo"     # OpeFriendInfoResponse
 FRIENDLIST_TAG = "56gJBnVh"     # FriendUnitInfoResponse
 BOOT_REPLIES = {'75fYdNxq', 'X07iYtp5', '6H1R9WID'}
@@ -290,7 +291,8 @@ def serve_friends(spec, reply_id=None, plaintext=None):
     out = dict(spec)
     if reply_id == REINFORCE_REPLY and isinstance(spec, dict):
         supports = all_support_profiles(_requested_support_tab(plaintext))
-        out[REINFORCE_TAG] = [_reinforce_row(f) for f in supports]
+        out.pop(REINFORCE_TAG, None)
+        out[REINFORCE_CLEAR_TAG] = [_reinforce_row(f) for f in supports]
         # The card list the support screen resolves through. Its own tag, NON-clearing (see VCINFO_TAG).
         cards = [_vc_info_row(f, f["unit"]["vision_card"])
                  for f in supports if f["unit"]["vision_card"]]
