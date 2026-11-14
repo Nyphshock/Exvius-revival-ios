@@ -112,6 +112,20 @@ class ArchiveReplayTests(unittest.TestCase):
         visible = event_archive.filter_events_by_story([row], player)
         self.assertEqual(visible[0]["missions"], row["missions"])
 
+    def test_dynamic_vortex_missions_use_checkpoint_filter(self):
+        player = SimpleNamespace(data={"progress": {"cleared_missions": []}})
+        mission_rows = [
+            {"uv60hgDW": "225", "qo3PECw6": "2110391"},
+            {"uv60hgDW": "225", "qo3PECw6": "2110394"},
+            {"uv60hgDW": "970", "qo3PECw6": "9700101"},
+        ]
+
+        with patch("trial_progression.checkpoint_mission_is_available",
+                   side_effect=lambda _player, mid: str(mid) != "2110394", create=True):
+            visible = ffbe_player._checkpoint_mission_rows(player, mission_rows, {"225", "970"})
+
+        self.assertEqual([row["qo3PECw6"] for row in visible], ["2110391", "9700101"])
+
     def test_only_present_enhance_areas_are_kept_open(self):
         self.assertIn("228", event_archive.enhance_areas())
         spec = {"0xkoNP8U": [

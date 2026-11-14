@@ -3057,6 +3057,15 @@ def _filter_checkpoint_gate_rows(player, rows):
             or checkpoint_mission_is_available(player, row['qo3PECw6'])]
 
 
+def _checkpoint_mission_rows(player, mission_rows, selected, archive_missions=None):
+    from trial_progression import checkpoint_mission_is_available
+    return [row for row in mission_rows
+            if str(row.get('uv60hgDW') or '') in selected
+            and str(row.get('qo3PECw6') or '')
+            and checkpoint_mission_is_available(player, row['qo3PECw6'])
+            and (archive_missions is None or str(row['qo3PECw6']) in archive_missions)]
+
+
 def _unlock_enhance_missions(spec, player, gate_rows, mission_rows, enhance_areas):
     """Permanently unlock every mission in the Enhance areas the client is currently showing."""
     if player is None or player.mode == 'frozen':
@@ -3218,12 +3227,10 @@ def serve_event_gate(spec, reply_id):
     event_missions = _load_mst_rows('F_MISSION_MST.ndjson')['__rows__']
     archive_missions = {mid for event in archive_events for mid in event['missions']} if archive_events is not None else None
     missions_by_area = {}
-    for mission_row in event_missions:
+    for mission_row in _checkpoint_mission_rows(State.player, event_missions, selected, archive_missions):
         area = str(mission_row.get('uv60hgDW') or '')
         mid = str(mission_row.get('qo3PECw6') or '')
-        if (area in selected and mid and checkpoint_mission_is_available(State.player, mid)
-                and (archive_missions is None or mid in archive_missions)):
-            missions_by_area.setdefault(area, []).append(mission_row)
+        missions_by_area.setdefault(area, []).append(mission_row)
     present_missions = {str(row.get('qo3PECw6')) for row in rows}
     for area, dungeon, _mission in facts:
         template = next(row for row in rows if str(row.get('uv60hgDW')) == area)
