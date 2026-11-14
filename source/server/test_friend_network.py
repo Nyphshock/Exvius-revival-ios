@@ -130,6 +130,19 @@ class FriendNetworkTests(unittest.TestCase):
         self.assertEqual(favorite["unit_instance_id"], "vivi")
         self.assertEqual(nemesis_2["support_tab"], 5)
 
+    def test_public_profile_validation_preserves_requested_support_tab(self):
+        profile = _HelperProfile()
+        profile.data["party"] = {"special": {"7": {"active_deck": 0, "decks": [{"id": 0, "members": [
+            {"disp_order": 3, "instance_id": "nemesis1"},
+        ]}]}}}
+        profile.roster_row = lambda _iid: {"master_id": "100000102", "level": 120}
+        with patch.object(friend_network, "player_for", return_value=profile), \
+                patch("ffbe_friends.unit_stats", return_value=(100, 10, 20, 30, 40, 50)), \
+                patch("ffbe_friends.limit_burst", return_value=None):
+            friend = friend_network.friend_profile("300000002", support_tab=4)
+
+        self.assertEqual(friend["support_tab"], 4)
+
     def test_native_friend_request_routes_to_real_profile_handler(self):
         import exvius_actions
 

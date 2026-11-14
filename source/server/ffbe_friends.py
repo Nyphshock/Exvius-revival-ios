@@ -103,6 +103,7 @@ def _entry(index: int, raw: dict) -> dict:
         "friend_id": friend_id,
         "emblem_id": int(raw.get("emblem_id") or 0),
         "rank": int(raw.get("rank") or 1),
+        "support_tab": int(raw.get("support_tab") or 1),
         "instance_id": str(raw.get("unit_instance_id") or (friend_id * 10 + 1)),
         "unit": {
             "master_id": master_id,
