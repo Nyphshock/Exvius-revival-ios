@@ -1038,7 +1038,7 @@ def rebalance_intangir_trial(mission: int | str, bundle: dict) -> dict:
     if not isinstance(parts, list):
         return bundle
     stat_overrides = {
-        'fh31sk7B': '690000',
+        'fh31sk7B': '35000000',
         '9NBV1XCS': '420',
         'Pn5w9dfh': '40',
         '84FJM3PD': '300',
