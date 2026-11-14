@@ -201,7 +201,7 @@ The certificate used on Android is the same one as iOS, so both devices can play
 
 ### Friends and support units
 
-The server creates a separate player profile for each Tailscale device. Other players must join the same Tailscale network and open the game once to register. Share your numeric Friend ID, search for another player's ID in **Friend → Search**, then send and accept the native friend request. Accepted friends appear in the support list and can lend their own active-party lead unit. Put the unit you want to lend in the first slot of your active party. No simulated friends are preloaded.
+The server creates a separate player profile for each Tailscale device. Other players must join the same Tailscale network and open the game once to register. Share your numeric Friend ID, search for another player's ID in **Friend → Search**, then send and accept the native friend request. Accepted friends appear with their configured **Favorite**, **Event 1**, **Event 2**, **Nemesis 1** and **Nemesis 2** helpers from Companion Settings. After changing a preset, friends should fully close and reopen the game to refresh its cached support list. No simulated friends are preloaded.
 
 ---
 

@@ -19,7 +19,7 @@ Each entry is one update to this repo. To update: in your repo folder run `git p
 
 ## 2026-11-14: Real-player friends
 
-- Removed the preloaded fake friends. Players on registered Tailscale profiles can search by Friend ID, send/accept/refuse requests, remove friends and borrow the first unit in each other's active party. The friend list and support list now use real profiles; synthetic Arena rivals are off by default.
+- Removed the preloaded fake friends. Players on registered Tailscale profiles can search by Friend ID, send/accept/refuse requests, remove friends and borrow each other's Favorite, Event 1, Event 2, Nemesis 1 and Nemesis 2 Companion units. The friend list and support list now use real profiles; synthetic Arena rivals are off by default.
 
 ## 2026-11-14: Enhance drop tables and banner availability
 

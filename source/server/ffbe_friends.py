@@ -1,8 +1,8 @@
-"""Serve registered real-player friends and their current party-lead units.
+"""Serve registered real-player friends and their configured Companion units.
 
 Friend relationships are managed by `friend_network.py`; this module serializes accepted friends
-for the native Friend list and Reinforcement replies. The first unit in a friend's active party is
-the borrowed helper.
+for the native Friend list and Reinforcement replies. Reinforcement tabs map to Favorite, Event 1,
+Event 2, Nemesis 1 and Nemesis 2 in the saved type-7 Companion deck.
 
 SHAPE. A support-list row is a UNIT row. It carries the same token set player_state._unit_rows
 emits for the player's own roster, plus the friend-only tokens m3Wghr1j (FriendId), 9qh17ZUf
@@ -130,6 +130,19 @@ def all_friends() -> list:
             if (friend := friend_network.friend_profile(target)) is not None]
 
 
+def all_support_profiles() -> list:
+    """The accepted friends' configured Favorite/Event/Nemesis units for the support picker."""
+    import friend_network
+    owner = friend_network.current_id()
+    supports = []
+    for target in friend_network.friend_ids(owner, relation=1):
+        for tab in range(1, 6):
+            profile = friend_network.friend_profile(target, support_tab=tab)
+            if profile is not None:
+                supports.append(profile)
+    return supports
+
+
 def _anyone(friend_id) -> dict | None:
     """A registered real profile by its friend ID."""
     import friend_network
@@ -164,7 +177,7 @@ def _reinforce_row(f: dict) -> dict:
             "%d-0" % (i + 1) for i in range(4)),
         "93Y6evuT": "@".join("%d-%s" % (i + 1, e) for i, e in enumerate(u["equipment"])) or "@".join(
             "%d-0" % (i + 1) for i in range(6)),
-        Y58ENcB4_KEY: "1",                      # the selected friend tab, echoed as sent
+        Y58ENcB4_KEY: str(f.get("support_tab", 1)),  # Favorite/Event/Nemesis support tab
         "L8d0fqpT": str(f["rank"]),      # TeamLv -- what the client shows as the friend Rank
         "9Tbns0eI": str(f["friend_id"]),        # commits the object (the row's owning user)
         # DELIBERATELY OMITTED unless the YAML sets them: 5giCMUd2/nQ1iAGf3 (vision card),
@@ -198,9 +211,9 @@ Y58ENcB4_KEY = "Y58ENcB4"
 
 def _vc_key(f: dict, vc_id) -> str:
     """The one string that ties a support row to a VC-info row. Any unique value works as long as both
-    sides agree - the friend id keeps it unique across friends without colliding with the player's own
-    card keys (which are user_vc_ids)."""
-    return "%s-%s" % (f["friend_id"], vc_id)
+    sides agree - friend id and tab keep it unique across friends/support slots without colliding with the
+    player's own card keys (which are user_vc_ids)."""
+    return "%s-%s-%s" % (f["friend_id"], f.get("support_tab", 1), vc_id)
 
 
 def _vc_info_row(f: dict, vc_id) -> dict:
@@ -259,9 +272,11 @@ def serve_friends(spec, reply_id=None):
     friends = all_friends()
     out = dict(spec)
     if reply_id == REINFORCE_REPLY and isinstance(spec, dict):
-        out[REINFORCE_TAG] = [_reinforce_row(f) for f in friends]
+        supports = all_support_profiles()
+        out[REINFORCE_TAG] = [_reinforce_row(f) for f in supports]
         # The card list the support screen resolves through. Its own tag, NON-clearing (see VCINFO_TAG).
-        cards = [_vc_info_row(f, f["unit"]["vision_card"]) for f in friends if f["unit"]["vision_card"]]
+        cards = [_vc_info_row(f, f["unit"]["vision_card"])
+                 for f in supports if f["unit"]["vision_card"]]
         if cards:
             out[VCINFO_TAG] = cards
         else:

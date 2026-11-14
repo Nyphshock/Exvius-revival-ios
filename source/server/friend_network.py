@@ -42,18 +42,35 @@ def player_for(player_id):
     return manager.player_for(player_id) if manager is not None else None
 
 
-def friend_profile(player_id):
-    """Public friend card using the first unit in the player's active party as its helper."""
+def friend_profile(player_id, support_tab=1):
+    """Public friend card using Favorite/Event/Nemesis slot from companion party type 7."""
     player_id = _player_id(player_id)
     player = player_for(player_id)
     if player is None:
         return None
     identity = player.data.get("identity") or {}
-    party_ids = player.party_instance_ids()
-    helper_id = str((player.data.get("exvius_friends") or {}).get("helper_instance_id") or
-                    (party_ids[0] if party_ids else ""))
-    if helper_id not in party_ids:
-        helper_id = party_ids[0] if party_ids else ""
+    try:
+        support_tab = int(support_tab)
+    except (TypeError, ValueError):
+        return None
+    if support_tab not in range(1, 6):
+        return None
+    party = player.data.get('party') or {}
+    special = (party.get('special') or {}).get('7') or {}
+    decks = special.get('decks') or []
+    active_deck = str(special.get('active_deck', '0'))
+    deck = next((row for row in decks if str(row.get('id')) == active_deck), None)
+    members = deck.get('members') or [] if deck else []
+    member = next((row for row in members
+                   if str(row.get('disp_order', '')) == str(support_tab - 1)), None)
+    if member is None:
+        # Older profiles may not have saved Companion settings yet.
+        if support_tab != 1:
+            return None
+        regular_ids = player.party_instance_ids()
+        helper_id = regular_ids[0] if regular_ids else ''
+    else:
+        helper_id = str(member.get('instance_id') or '')
     unit = player.roster_row(helper_id) if helper_id else None
     if unit is None:
         return None
@@ -68,6 +85,7 @@ def friend_profile(player_id):
             "rank": (player.data.get("rank") or {}).get("level", 1),
             "emblem_id": (player.data.get("profile") or {}).get("player_emblem_id", 0),
             "unit_instance_id": helper_id,
+            "support_tab": support_tab,
             "unit": {
                 "master_id": unit.get("master_id"),
                 "level": unit.get("level", 1),

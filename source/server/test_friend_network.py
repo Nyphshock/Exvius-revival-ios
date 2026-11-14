@@ -91,6 +91,44 @@ class FriendNetworkTests(unittest.TestCase):
 
         self.assertEqual(friend["unit"]["equipment"], ["sword", "0", "0", "0", "armor", "0"])
 
+    def test_public_friend_uses_companion_settings_by_tab_not_regular_party_lead(self):
+        profile = _HelperProfile()
+        profile.data = {
+            "identity": {"user_id": "300000002", "handle_name": "Player Two"},
+            "rank": {"level": 42}, "profile": {"player_emblem_id": 0},
+            "party": {"special": {"7": {"active_deck": 0, "decks": [{"id": 0, "members": [
+                {"disp_order": 0, "instance_id": "vivi"},
+                {"disp_order": 1, "instance_id": "event1"},
+                {"disp_order": 2, "instance_id": "event2"},
+                {"disp_order": 3, "instance_id": "nemesis1"},
+                {"disp_order": 4, "instance_id": "nemesis2"},
+            ]}]}}},
+        }
+        units = {
+            "vivi": {"instance_id": "vivi", "master_id": "100004605", "level": 120},
+            "event1": {"instance_id": "event1", "master_id": "100004403", "level": 120},
+            "event2": {"instance_id": "event2", "master_id": "212000103", "level": 120},
+            "nemesis1": {"instance_id": "nemesis1", "master_id": "205000203", "level": 120},
+            "nemesis2": {"instance_id": "nemesis2", "master_id": "209000204", "level": 120},
+            "regular-lead": {"instance_id": "regular-lead", "master_id": "100000102", "level": 120},
+        }
+        profile.party_instance_ids = lambda: ["regular-lead"]
+        profile.roster_row = lambda instance_id: units.get(instance_id)
+        with patch.object(friend_network, "player_for", return_value=profile), \
+                patch("ffbe_friends._entry", side_effect=lambda _index, raw: raw):
+            favorite = friend_network.friend_profile("300000002", support_tab=1)
+            event_1 = friend_network.friend_profile("300000002", support_tab=2)
+            event_2 = friend_network.friend_profile("300000002", support_tab=3)
+            nemesis_1 = friend_network.friend_profile("300000002", support_tab=4)
+            nemesis_2 = friend_network.friend_profile("300000002", support_tab=5)
+
+        self.assertEqual([favorite["unit"]["master_id"], event_1["unit"]["master_id"],
+                          event_2["unit"]["master_id"], nemesis_1["unit"]["master_id"],
+                          nemesis_2["unit"]["master_id"]],
+                         ["100004605", "100004403", "212000103", "205000203", "209000204"])
+        self.assertEqual(favorite["unit_instance_id"], "vivi")
+        self.assertEqual(nemesis_2["support_tab"], 5)
+
     def test_native_friend_request_routes_to_real_profile_handler(self):
         import exvius_actions
 
@@ -145,6 +183,7 @@ class FriendNetworkTests(unittest.TestCase):
         friend = {"friend_id": 300000002, "display_name": "Player Two",
                   "unit": {"vision_card": ""}}
         with patch.object(ffbe_friends, "all_friends", return_value=[friend]), \
+            patch.object(ffbe_friends, "all_support_profiles", return_value=[friend]), \
                 patch.object(ffbe_friends, "_reinforce_row",
                              return_value={"m3Wghr1j": "300000002", "og2GHy49": "unit-lead"}), \
                 patch.object(ffbe_friends, "_friend_list_row",
@@ -156,6 +195,25 @@ class FriendNetworkTests(unittest.TestCase):
             {"m3Wghr1j": "300000002", "og2GHy49": "unit-lead"}])
         self.assertEqual(reply[ffbe_friends.FRIENDLIST_TAG], [
             {"m3Wghr1j": "300000002", "8zE6w9RP": "0"}])
+
+    def test_reinforcement_reply_serves_all_five_companion_tabs(self):
+        import ffbe_friends
+        st.State.player = SimpleNamespace(
+            data={"identity": {"user_id": "300000001"}, "counts": {"friend": 1}},
+            mode="live", dirty=False)
+        profiles = [{"friend_id": 300000002, "support_tab": tab, "unit": {"vision_card": ""}}
+                    for tab in range(1, 6)]
+        with patch.object(ffbe_friends, "all_friends", return_value=[profiles[0]]), \
+                patch.object(ffbe_friends, "all_support_profiles", return_value=profiles), \
+                patch.object(ffbe_friends, "_reinforce_row",
+                             side_effect=lambda friend: {"m3Wghr1j": str(friend["friend_id"]),
+                                                        "Y58ENcB4": str(friend["support_tab"])}), \
+                patch.object(ffbe_friends, "_friend_list_row", return_value={"m3Wghr1j": "300000002"}), \
+                patch.object(ffbe_friends, "_suggestion_rows", return_value=[]):
+            reply = ffbe_friends.serve_friends({}, ffbe_friends.REINFORCE_REPLY)
+
+        self.assertEqual([row["Y58ENcB4"] for row in reply[ffbe_friends.REINFORCE_TAG]],
+                         ["1", "2", "3", "4", "5"])
 
     def test_native_friend_request_saves_pending_and_returns_friend_row(self):
         import exvius_actions_arena
