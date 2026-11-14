@@ -14,6 +14,7 @@ Each entry is one update to this repo. To update: in your repo folder run `git p
 
 - Enhance dungeon drop entries now have a guaranteed 100% chance and triple their configured quantity.
 - Enhance banners already present in the Vortex stay active by extending their availability dates; no extra banners are added and story progression remains in effect.
+- Cactuar Dunes now drops its Metal units instead of falling back to generic upgrade materials.
 
 ## 2026-11-13: Farplane exchanges for owned currencies
 

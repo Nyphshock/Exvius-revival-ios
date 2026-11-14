@@ -30,6 +30,25 @@ class EnhanceDropTests(unittest.TestCase):
         self.assertEqual(normal[DROP_TAG_ROWS][0][DROP_TOKEN],
                          "20:101:2:100,20:101:3:100,28:202:350:100")
 
+    def test_cactuar_dunes_drops_metal_units_instead_of_fallback_materials(self):
+        spec = {
+            "an6TB4WS": [{"6v7y3QcJ": "1", "2fY1IomW": "group-1"}],
+            "Bi6hVv34": [
+                {"2fY1IomW": "group-1", "xqartN26": "111051000"},
+                {"2fY1IomW": "group-1", "xqartN26": "111061000"},
+                {"2fY1IomW": "group-1", "xqartN26": "211011000"},
+                {"2fY1IomW": "group-1", "xqartN26": "111091000"},
+            ],
+            DROP_TAG_ROWS: [{"6v7y3QcJ": "1", DROP_TOKEN: ""}],
+        }
+        with patch("ffbe_battle.calamity_writ_chance", return_value=0):
+            rolled = ffbe_battle.roll_drops(spec, mid="2111201")
+        self.assertEqual(
+            rolled[DROP_TAG_ROWS][0][DROP_TOKEN],
+            "10:900020101:3:100,10:900020201:3:100,10:900020301:3:100,10:900020401:3:100",
+        )
+        self.assertNotIn("20:", rolled[DROP_TAG_ROWS][0][DROP_TOKEN])
+
 
 if __name__ == "__main__":
     unittest.main()

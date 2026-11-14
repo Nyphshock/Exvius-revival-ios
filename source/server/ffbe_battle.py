@@ -47,6 +47,13 @@ __all__ = [
 
 _CHALLENGE_INFO_LOGGED: set = set()   # reply ids already announced by serve_challenge_clear_all
 _ENHANCE_MISSIONS: set[str] | None = None
+CACTUAR_DUNES_MISSIONS = frozenset(("2111201", "2111202", "2111203", "2111204"))
+CACTUAR_DUNES_DROPS = {
+    "111051000": "900020101",  # Metal Minituar
+    "111061000": "900020201",  # Metal Cactuar
+    "211011000": "900020301",  # Metal Gigantuar
+    "111091000": "900020401",  # King Metal Minituar
+}
 
 
 def _is_enhance_mission(mid: str | None) -> bool:
@@ -76,6 +83,34 @@ def _triple_enhance_drops(src: str | None) -> str | None:
                 fields.append("100")
         entries.append(":".join(fields))
     return ",".join(entries)
+
+
+def _cactuar_dunes_drop_pools(spec, mid):
+    if str(mid) not in CACTUAR_DUNES_MISSIONS or not isinstance(spec, dict):
+        return spec
+    phases = {str(row.get("6v7y3QcJ")): str(row.get("2fY1IomW"))
+              for row in spec.get("an6TB4WS") or [] if isinstance(row, dict)}
+    slots = {}
+    for row in spec.get("Bi6hVv34") or []:
+        if isinstance(row, dict):
+            slots.setdefault(str(row.get("2fY1IomW")), []).append(row)
+    rows = spec.get(DROP_TAG_ROWS)
+    if not isinstance(rows, list):
+        return spec
+    out, changed = [], False
+    for row in rows:
+        if not isinstance(row, dict) or row.get(DROP_TOKEN):
+            out.append(row)
+            continue
+        group = phases.get(str(row.get("6v7y3QcJ")))
+        drops = [f"10:{CACTUAR_DUNES_DROPS[str(slot.get('xqartN26'))]}:1:100"
+                 for slot in slots.get(group, [])
+                 if str(slot.get("xqartN26")) in CACTUAR_DUNES_DROPS]
+        if drops:
+            row = dict(row, **{DROP_TOKEN: ",".join(drops)})
+            changed = True
+        out.append(row)
+    return dict(spec, **{DROP_TAG_ROWS: out}) if changed else spec
 
 
 def _roll_items(src: str | None) -> str:
@@ -137,6 +172,7 @@ def roll_drops(spec, mid: str | None = None, is_battle_bundle: bool = False):
     if not ROLL_DROPS:
         return spec            # reference state: serve the payload's own candidate list verbatim
     enhance = _is_enhance_mission(mid)
+    spec = _cactuar_dunes_drop_pools(spec, mid)
     encount = spec.get("6v0LPiRe")
     if isinstance(encount, list) and encount:
         # An exploration's random-encounter rows (battle_content.encount_rows): each row is one
