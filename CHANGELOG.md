@@ -10,11 +10,12 @@ Each entry is one update to this repo. To update: in your repo folder run `git p
 - Removed the Rare, Premium 10+1, 5★ Guaranteed 10+1, 5+1 Ticket and EXVIUS summons; the regular Standard Summon remains.
 - The per-checkpoint main-story mission cap is not included yet; exact mission IDs for the named story destinations still need to be resolved.
 
-## 2026-11-14: Enhance drops and banner availability
+## 2026-11-14: Enhance drop tables and banner availability
 
-- Enhance dungeon drop entries now have a guaranteed 100% chance and triple their configured quantity.
+- Enhance dungeon drop pools now preserve each dungeon's own item types, quantities and chances.
 - Enhance banners already present in the Vortex stay active by extending their availability dates; no extra banners are added and story progression remains in effect.
-- Cactuar Dunes now drops its Metal units instead of falling back to generic upgrade materials.
+- Cactuar Dunes and Gil Snapper's Cave now drop their matching units; Vault of Hidden Treasures and King Mog's Lost Maps add their documented unit drops while preserving existing item pools.
+- Vault bosses documented with no drops no longer receive generic upgrade materials as fallback loot.
 
 ## 2026-11-13: Farplane exchanges for owned currencies
 

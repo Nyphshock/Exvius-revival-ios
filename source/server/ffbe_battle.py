@@ -46,48 +46,72 @@ __all__ = [
 ]
 
 _CHALLENGE_INFO_LOGGED: set = set()   # reply ids already announced by serve_challenge_clear_all
-_ENHANCE_MISSIONS: set[str] | None = None
 CACTUAR_DUNES_MISSIONS = frozenset(("2111201", "2111202", "2111203", "2111204"))
 CACTUAR_DUNES_DROPS = {
     "111051000": "900020101",  # Metal Minituar
     "111061000": "900020201",  # Metal Cactuar
     "211011000": "900020301",  # Metal Gigantuar
     "111091000": "900020401",  # King Metal Minituar
+    "111091001": "900020401",
 }
+GIL_SNAPPER_CAVE_MISSIONS = frozenset(("2111301", "2111302", "2111303", "2111304"))
+GIL_SNAPPER_CAVE_DROPS = {
+    "103041000": "900010101",  # Mini Gil Snapper
+    "103051000": "900010201",  # Gil Snapper
+    "103061000": "900010301",  # King Gil Snapper
+    "103111000": "900010401",  # Gil Snapper Family
+}
+VAULT_UNIT_DROPS = {
+    **CACTUAR_DUNES_DROPS,
+    **GIL_SNAPPER_CAVE_DROPS,
+    "103121000": "900010501",  # Gil Snapper Tower
+    "108031000": "900000101", "108041000": "900000201", "208011000": "900000301",
+    "108032000": "900001101", "108042000": "900001201", "208012000": "900001301",
+    "108033000": "900002101", "108043000": "900002201", "208013000": "900002301",
+    "108034000": "900003101", "108044000": "900003201", "208014000": "900003301",
+    "108035000": "900004101", "108045000": "900004201", "208015000": "900004301",
+    "108036000": "900005101", "108046000": "900005201", "208016000": "900005301",
+    "108037000": "900006101", "108047000": "900006201", "208017000": "900006301",
+}
+VAULT_STAR_QUARTZ_ENEMIES = frozenset(("111071002", "111071003", "111071004", "111071005", "111071006"))
+VAULT_NO_DROP_ENEMIES = frozenset((
+    "203020004", "203020005", "206090002", "206090003",
+    "303070005", "303070006", "202020006", "202020007",
+))
+_VAULT_HIDDEN_TREASURES_MISSIONS: frozenset[str] | None = None
 
 
-def _is_enhance_mission(mid: str | None) -> bool:
-    global _ENHANCE_MISSIONS
-    if _ENHANCE_MISSIONS is None:
-        import event_archive
-        _ENHANCE_MISSIONS = {
-            str(mission)
-            for event in event_archive.events()
-            if event_archive.vortex_tab(event.get("name")) == "2"
-            for mission in event.get("missions") or []
-        }
-    return str(mid) in _ENHANCE_MISSIONS
-
-
-def _triple_enhance_drops(src: str | None) -> str | None:
-    if not src:
-        return src
-    entries = []
-    for entry in src.split(","):
-        fields = entry.split(":")
-        if len(fields) >= 3 and fields[2].isdigit():
-            fields[2] = str(int(fields[2]) * 3)
-            if len(fields) >= 4:
-                fields[3] = "100"
-            else:
-                fields.append("100")
-        entries.append(":".join(fields))
-    return ",".join(entries)
-
-
-def _cactuar_dunes_drop_pools(spec, mid):
-    if str(mid) not in CACTUAR_DUNES_MISSIONS or not isinstance(spec, dict):
+def _unit_vortex_drop_pools(spec, mid):
+    mid = str(mid)
+    if not isinstance(spec, dict):
         return spec
+    if mid in CACTUAR_DUNES_MISSIONS:
+        unit_by_enemy = CACTUAR_DUNES_DROPS
+        count = 3
+        mode = "replace"
+    elif mid in GIL_SNAPPER_CAVE_MISSIONS:
+        unit_by_enemy = GIL_SNAPPER_CAVE_DROPS
+        count = 1
+        mode = "replace"
+    elif mid in ("8180101", "8180106"):
+        unit_by_enemy = ({"204231000": "904000101", "204231001": "904000101", "204231002": "904000101"}
+                         if mid == "8180101" else {"103121000": "900010501"})
+        count = 1 if mid == "8180101" else 5
+        mode = "replace"
+    else:
+        global _VAULT_HIDDEN_TREASURES_MISSIONS
+        if _VAULT_HIDDEN_TREASURES_MISSIONS is None:
+            import event_archive
+            _VAULT_HIDDEN_TREASURES_MISSIONS = frozenset(
+                str(mission) for event in event_archive.events()
+                if event.get("name") == "Vault of Hidden Treasures"
+                for mission in event.get("missions") or []
+            )
+        if mid not in _VAULT_HIDDEN_TREASURES_MISSIONS:
+            return spec
+        unit_by_enemy = VAULT_UNIT_DROPS
+        count = 1
+        mode = "append"
     phases = {str(row.get("6v7y3QcJ")): str(row.get("2fY1IomW"))
               for row in spec.get("an6TB4WS") or [] if isinstance(row, dict)}
     slots = {}
@@ -99,13 +123,30 @@ def _cactuar_dunes_drop_pools(spec, mid):
         return spec
     out, changed = [], False
     for row in rows:
-        if not isinstance(row, dict) or row.get(DROP_TOKEN):
+        if not isinstance(row, dict):
             out.append(row)
             continue
         group = phases.get(str(row.get("6v7y3QcJ")))
-        drops = [f"10:{CACTUAR_DUNES_DROPS[str(slot.get('xqartN26'))]}:1:100"
-                 for slot in slots.get(group, [])
-                 if str(slot.get("xqartN26")) in CACTUAR_DUNES_DROPS]
+        enemy_ids = [str(slot.get("xqartN26")) for slot in slots.get(group, [])]
+        if mode == "append" and enemy_ids and all(enemy in VAULT_NO_DROP_ENEMIES for enemy in enemy_ids):
+            row = dict(row)
+            row.pop(DROP_TOKEN, None)
+            out.append(row)
+            changed = True
+            continue
+        original = [entry for entry in str(row.get(DROP_TOKEN) or "").split(",") if entry]
+        drops = [] if mode == "replace" else list(original)
+        existing = {tuple(entry.split(":")[:2]) for entry in original}
+        for enemy in enemy_ids:
+            item = unit_by_enemy.get(enemy)
+            if item is not None:
+                entry = f"10:{item}:{count}:100"
+            elif mode == "append" and enemy in VAULT_STAR_QUARTZ_ENEMIES:
+                entry = "20:106200100:1:100"
+            else:
+                continue
+            if tuple(entry.split(":")[:2]) not in existing:
+                drops.append(entry)
         if drops:
             row = dict(row, **{DROP_TOKEN: ",".join(drops)})
             changed = True
@@ -171,8 +212,7 @@ def roll_drops(spec, mid: str | None = None, is_battle_bundle: bool = False):
         return spec
     if not ROLL_DROPS:
         return spec            # reference state: serve the payload's own candidate list verbatim
-    enhance = _is_enhance_mission(mid)
-    spec = _cactuar_dunes_drop_pools(spec, mid)
+    spec = _unit_vortex_drop_pools(spec, mid)
     encount = spec.get("6v0LPiRe")
     if isinstance(encount, list) and encount:
         # An exploration's random-encounter rows (battle_content.encount_rows): each row is one
@@ -180,8 +220,7 @@ def roll_drops(spec, mid: str | None = None, is_battle_bundle: bool = False):
         # client reports what it actually fought and picked up at MissionEnd (`xF9Sr1a6`), which
         # is what `credit_mission_rewards` pays, so these rolls never touch LAST_DROPS.
         spec = dict(spec)
-        spec["6v0LPiRe"] = [dict(row, **{DROP_TOKEN: _roll_items(
-                    _triple_enhance_drops(row.get(DROP_TOKEN)) if enhance else row.get(DROP_TOKEN))})
+        spec["6v0LPiRe"] = [dict(row, **{DROP_TOKEN: _roll_items(row.get(DROP_TOKEN))})
                             if isinstance(row, dict) and DROP_TOKEN in row else row
                             for row in encount]
     rows = spec.get(DROP_TAG_ROWS)
@@ -201,8 +240,7 @@ def roll_drops(spec, mid: str | None = None, is_battle_bundle: bool = False):
         # `dropInfo` (per-monster pool, e.g. Steel Bat's differs from Dire Rat's), and the DB is the oracle
         # for it -- so the pool belongs in the served `9BetM2Ds`, and the server only rolls it. `DROP_TABLE`
         # remains as the fallback for a row that has none.
-        candidates = _triple_enhance_drops(row.get(DROP_TOKEN)) if enhance else row.get(DROP_TOKEN)
-        rolled = _roll_items(candidates).split(",")
+        rolled = _roll_items(row.get(DROP_TOKEN)).split(",")
         row = dict(row)
         # SERVE 4 FIELDS -- the parser reads fields [0..3] with NO bounds check (`getMissionDropItemInfo`
         # 0x19f7c28: `add x0,x8,#0x48` then StrToInt, BEFORE the count>=5 guard at 0x19f7cfc), so a
