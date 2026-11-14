@@ -6,7 +6,6 @@ Each entry is one update to this repo. To update: in your repo folder run `git p
 
 - Each profile's next uncleared trial checkpoint limits dated Vortex events, summon banners and Home event banners. The active trial remains playable at every difficulty; all trials sharing a checkpoint date must be cleared before progression advances.
 - Direct Vortex mission loads are checked server-side. After the final checkpoint, dated content is limited to Global's 2024-10-30 closure.
-- Added the historical meta and trial/story availability research CSVs. Corrected the Alhena and Warden Welter release dates in the trial/story CSV.
 - The per-checkpoint main-story mission cap is not included yet; exact mission IDs for the named story destinations still need to be resolved.
 
 ## 2026-11-13: Farplane exchanges for owned currencies
