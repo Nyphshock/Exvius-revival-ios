@@ -97,6 +97,18 @@ def apply_availability(spec, policy, now=None, resolved_areas=None):
     return out
 
 
+def keep_present_areas_open(spec, areas, now=None):
+    rows = spec.get('0xkoNP8U') if isinstance(spec, dict) else None
+    if not isinstance(rows, list):
+        return spec
+    present = {str(row.get('uv60hgDW')) for row in rows if isinstance(row, dict)}
+    selected = present & set(map(str, areas))
+    if not selected:
+        return spec
+    return apply_availability(spec, {'version': 1, 'areas': sorted(selected), 'permanent': True},
+                              now=now, resolved_areas=selected)
+
+
 def native_gate_dates(spec):
     """Preserve captured instants while spelling them for GL9's date-text reader."""
     if not isinstance(spec, dict) or not isinstance(spec.get('0xkoNP8U'), list):

@@ -17,6 +17,7 @@ _DOCUMENT = None
 _HISTORY = None
 _EVENT_NAMES_BY_AREA = None
 _VORTEX_TABS = None
+_ENHANCE_AREAS = None
 REPLAY_LOOKBACK_DAYS = 14   # first replay week: events still running when the replay starts
 
 # The archive has no Global release field for these recurring/legacy Vortex areas.
@@ -119,6 +120,16 @@ def vortex_tab(name, override=None):
             for event_name in category['events'] + category.get('aliases', [])
         }
     return _VORTEX_TABS.get(' '.join(str(name).split()).casefold(), '1')
+
+
+def enhance_areas():
+    global _ENHANCE_AREAS
+    if _ENHANCE_AREAS is None:
+        _ENHANCE_AREAS = frozenset(
+            str(row['area']) for row in events()
+            if row.get('area') and vortex_tab(row.get('name')) == '2'
+        )
+    return _ENHANCE_AREAS
 
 
 def event_season(row):

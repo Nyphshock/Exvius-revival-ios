@@ -46,6 +46,38 @@ __all__ = [
 ]
 
 _CHALLENGE_INFO_LOGGED: set = set()   # reply ids already announced by serve_challenge_clear_all
+_ENHANCE_MISSIONS: set[str] | None = None
+
+
+def _is_enhance_mission(mid: str | None) -> bool:
+    global _ENHANCE_MISSIONS
+    if _ENHANCE_MISSIONS is None:
+        import event_archive
+        _ENHANCE_MISSIONS = {
+            str(mission)
+            for event in event_archive.events()
+            if event_archive.vortex_tab(event.get("name")) == "2"
+            for mission in event.get("missions") or []
+        }
+    return str(mid) in _ENHANCE_MISSIONS
+
+
+def _triple_enhance_drops(src: str | None) -> str | None:
+    if not src:
+        return src
+    entries = []
+    for entry in src.split(","):
+        fields = entry.split(":")
+        if len(fields) >= 3 and fields[2].isdigit():
+            fields[2] = str(int(fields[2]) * 3)
+            if len(fields) >= 4:
+                fields[3] = "100"
+            else:
+                fields.append("100")
+        entries.append(":".join(fields))
+    return ",".join(entries)
+
+
 def _roll_items(src: str | None) -> str:
     """Roll a `cat:item:count:rate,...` candidate list; never empty (see roll_drops)."""
     src = src or ",".join(DROP_TABLE.split(","))
@@ -104,6 +136,7 @@ def roll_drops(spec, mid: str | None = None, is_battle_bundle: bool = False):
         return spec
     if not ROLL_DROPS:
         return spec            # reference state: serve the payload's own candidate list verbatim
+    enhance = _is_enhance_mission(mid)
     encount = spec.get("6v0LPiRe")
     if isinstance(encount, list) and encount:
         # An exploration's random-encounter rows (battle_content.encount_rows): each row is one
@@ -111,7 +144,8 @@ def roll_drops(spec, mid: str | None = None, is_battle_bundle: bool = False):
         # client reports what it actually fought and picked up at MissionEnd (`xF9Sr1a6`), which
         # is what `credit_mission_rewards` pays, so these rolls never touch LAST_DROPS.
         spec = dict(spec)
-        spec["6v0LPiRe"] = [dict(row, **{DROP_TOKEN: _roll_items(row.get(DROP_TOKEN))})
+        spec["6v0LPiRe"] = [dict(row, **{DROP_TOKEN: _roll_items(
+                    _triple_enhance_drops(row.get(DROP_TOKEN)) if enhance else row.get(DROP_TOKEN))})
                             if isinstance(row, dict) and DROP_TOKEN in row else row
                             for row in encount]
     rows = spec.get(DROP_TAG_ROWS)
@@ -131,7 +165,8 @@ def roll_drops(spec, mid: str | None = None, is_battle_bundle: bool = False):
         # `dropInfo` (per-monster pool, e.g. Steel Bat's differs from Dire Rat's), and the DB is the oracle
         # for it -- so the pool belongs in the served `9BetM2Ds`, and the server only rolls it. `DROP_TABLE`
         # remains as the fallback for a row that has none.
-        rolled = _roll_items(row.get(DROP_TOKEN)).split(",")
+        candidates = _triple_enhance_drops(row.get(DROP_TOKEN)) if enhance else row.get(DROP_TOKEN)
+        rolled = _roll_items(candidates).split(",")
         row = dict(row)
         # SERVE 4 FIELDS -- the parser reads fields [0..3] with NO bounds check (`getMissionDropItemInfo`
         # 0x19f7c28: `add x0,x8,#0x48` then StrToInt, BEFORE the count>=5 guard at 0x19f7cfc), so a

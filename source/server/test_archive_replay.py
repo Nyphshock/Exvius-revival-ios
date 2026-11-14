@@ -4,6 +4,7 @@ import unittest
 from unittest.mock import patch
 
 import event_archive
+import exvius_events
 import ffbe_banner
 import gacha_archive
 import gacha_rotation
@@ -97,6 +98,20 @@ class ArchiveReplayTests(unittest.TestCase):
         ]
         self.assertEqual([row["area"] for row in event_archive.filter_events_by_story(rows, player)],
                          ["218", "219", "1038"])
+
+    def test_only_present_enhance_areas_are_kept_open(self):
+        self.assertIn("228", event_archive.enhance_areas())
+        spec = {"0xkoNP8U": [
+            {"uv60hgDW": "228", "VjJQ51uG": "2000-01-01 00:00:00",
+             "m8ivD4NX": "2000-01-02 00:00:00"},
+            {"uv60hgDW": "970", "VjJQ51uG": "2000-01-01 00:00:00",
+             "m8ivD4NX": "2000-01-02 00:00:00"},
+        ]}
+        out = exvius_events.keep_present_areas_open(spec, event_archive.enhance_areas(), now=1_767_398_400)
+        self.assertEqual(len(out["0xkoNP8U"]), 2)
+        self.assertNotEqual(out["0xkoNP8U"][0]["m8ivD4NX"], "2000-01-02 00:00:00")
+        self.assertEqual(out["0xkoNP8U"][1], spec["0xkoNP8U"][1])
+        self.assertEqual(spec["0xkoNP8U"][0]["m8ivD4NX"], "2000-01-02 00:00:00")
 
     def test_all_difficulties_in_active_trial_dungeon_are_loadable(self):
         player = SimpleNamespace(data={"progress": {"cleared_missions": []}})

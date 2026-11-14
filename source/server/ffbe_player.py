@@ -3184,7 +3184,11 @@ def serve_event_gate(spec, reply_id):
             rows, gate_changed = ordered, True
     if added or gate_changed:
         spec[EVENT_GATE_TAG] = rows
-    spec = serve_switches(apply_availability(spec, policy, resolved_areas=[f[0] for f in facts]))
+    spec = apply_availability(spec, policy, resolved_areas=[f[0] for f in facts])
+    from event_archive import enhance_areas
+    from exvius_events import keep_present_areas_open
+    spec = keep_present_areas_open(spec, enhance_areas())
+    spec = serve_switches(spec)
     # GateMissionScene keeps the Rewards link only when its BannerMst has an
     # active BannerScheduleMst row. The master table itself contains no dates.
     reward_ids = {raid['reward_banner_id'] for raid in raids.values() if raid}

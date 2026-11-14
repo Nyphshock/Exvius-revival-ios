@@ -10,6 +10,11 @@ Each entry is one update to this repo. To update: in your repo folder run `git p
 - Removed the Rare, Premium 10+1, 5★ Guaranteed 10+1, 5+1 Ticket and EXVIUS summons; the regular Standard Summon remains.
 - The per-checkpoint main-story mission cap is not included yet; exact mission IDs for the named story destinations still need to be resolved.
 
+## 2026-11-14: Enhance drops and banner availability
+
+- Enhance dungeon drop entries now have a guaranteed 100% chance and triple their configured quantity.
+- Enhance banners already present in the Vortex stay active by extending their availability dates; no extra banners are added and story progression remains in effect.
+
 ## 2026-11-13: Farplane exchanges for owned currencies
 
 - The Moogle Guard Captain lists every catalogued exchange with stock for currencies you hold, including exchanges not yet reached by the replay.
