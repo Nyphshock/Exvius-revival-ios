@@ -177,13 +177,17 @@ def observe_load(spec, mid, is_battle_bundle, plaintext=None):
             helper = helper_from_request(plaintext)
             if helper:
                 State.player.data['exvius_repeat']['attempt']['helper'] = helper
-            pots = {}
+            pots, units = {}, {}
             for row in spec.get('y35YvQjZ') or []:
                 entries = str(row.get('9BetM2Ds') or '').split(',') if isinstance(row, dict) else []
                 for entry in entries:
                     fields = entry.split(':')
                     if len(fields) >= 3 and fields[0] == '28' and fields[1].isdigit() and fields[2].isdigit():
                         pots[fields[1]] = pots.get(fields[1], 0) + int(fields[2])
+                    elif len(fields) >= 3 and fields[0] == '10' and fields[1].isdigit() and fields[2].isdigit():
+                        units[fields[1]] = units.get(fields[1], 0) + int(fields[2])
+            if units:
+                State.player.data['exvius_repeat']['attempt']['unit_drops'] = units
             if pots:
                 State.player.data['exvius_repeat']['attempt']['series_drops'] = pots
             import guide            # the battle's monsters, for the Guide at MissionEnd (guide.record_battle)

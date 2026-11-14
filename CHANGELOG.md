@@ -2,6 +2,10 @@
 
 Each entry is one update to this repo. To update: in your repo folder run `git pull`, then from `ios-server` run `docker compose build && docker compose up -d`. Your save isn't touched. Open the game twice afterwards so it picks up the new data.
 
+## 2026-11-14: Vortex unit drops credited
+
+- Units dropped in Vortex dungeons (Cactuar Dunes, Gil Snapper's Cave, Vaults) are now added to your account even if the game doesn't report them.
+
 ## 2026-11-14: Trial checkpoint progression
 
 - Each profile's next uncleared trial checkpoint limits dated Vortex events, summon banners and Home event banners. The active trial remains playable at every difficulty; all trials sharing a checkpoint date must be cleared before progression advances.

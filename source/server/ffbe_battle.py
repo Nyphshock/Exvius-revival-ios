@@ -665,11 +665,12 @@ def _credit_mission_rewards(plaintext: str | None, spec=None):
     # The phone omits some rolled unit-pot drops; credit only the amount not already reported.
     if mission_result_from(plaintext).get('cleared') is True:
         attempt = State.player.data.get("exvius_repeat", {}).get("attempt", {})
-        for iid, count in (attempt.get("series_drops") or {}).items():
-            missing = int(count) - reported.get((28, str(iid)), 0)
-            row = {"kind": 28, "id": int(iid), "count": missing}
-            if missing > 0 and State.player._can_credit(row) and State.player._grant_items([row]) == [row]:
-                paid.append(f"28:{iid}x{missing} (not reported)")
+        for kind, key in ((28, "series_drops"), (10, "unit_drops")):
+            for iid, count in (attempt.get(key) or {}).items():
+                missing = int(count) - reported.get((kind, str(iid)), 0)
+                row = {"kind": kind, "id": int(iid), "count": missing}
+                if missing > 0 and State.player._can_credit(row) and State.player._grant_items([row]) == [row]:
+                    paid.append(f"{kind}:{iid}x{missing} (not reported)")
     # Rank points come from the REPLY (the request never carries them): `wuUakq71` is the delta granted
     # for this battle. Credit the total into `rank.exp` so the next `3oU9Ktb7` agrees with the client.
     if isinstance(spec, dict):
