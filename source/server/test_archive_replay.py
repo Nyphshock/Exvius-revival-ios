@@ -100,6 +100,18 @@ class ArchiveReplayTests(unittest.TestCase):
         self.assertEqual([row["area"] for row in event_archive.filter_events_by_story(rows, player)],
                          ["218", "219", "1038"])
 
+    def test_chamber_of_awakening_five_star_is_hidden_until_first_checkpoint_clear(self):
+        player = SimpleNamespace(data={"progress": {"cleared_missions": []}})
+        row = {"area": "225", "name": "Chamber of Awakening", "group": "permanent",
+               "missions": ["2110391", "2110392", "2110393", "2110394"]}
+
+        visible = event_archive.filter_events_by_story([row], player)
+
+        self.assertEqual(visible[0]["missions"], ["2110391", "2110392", "2110393"])
+        player.data["progress"]["cleared_missions"].append("8991101")
+        visible = event_archive.filter_events_by_story([row], player)
+        self.assertEqual(visible[0]["missions"], row["missions"])
+
     def test_only_present_enhance_areas_are_kept_open(self):
         self.assertIn("228", event_archive.enhance_areas())
         spec = {"0xkoNP8U": [
@@ -133,6 +145,18 @@ class ArchiveReplayTests(unittest.TestCase):
                          ["other", "2280101", "2280102"])
         self.assertEqual(spec["W0E8BHa8"], [{"vUCf4Rw3": "other", "zI5a9LPo": "123", "N6hVhvgf": "0"}])
         self.assertTrue(player.dirty)
+
+    def test_vortex_gate_rows_hide_checkpoint_restricted_missions(self):
+        player = SimpleNamespace(data={"progress": {"cleared_missions": []}})
+        rows = [
+            {"uv60hgDW": "225", "qo3PECw6": "2110391"},
+            {"uv60hgDW": "225", "qo3PECw6": "2110394"},
+            {"uv60hgDW": "225"},
+        ]
+
+        visible = ffbe_player._filter_checkpoint_gate_rows(player, rows)
+
+        self.assertEqual([row.get("qo3PECw6") for row in visible], ["2110391", None])
 
     def test_all_difficulties_in_active_trial_dungeon_are_loadable(self):
         player = SimpleNamespace(data={"progress": {"cleared_missions": []}})

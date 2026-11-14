@@ -3051,6 +3051,12 @@ def event_gate_art(area):
     return name
 
 
+def _filter_checkpoint_gate_rows(player, rows):
+    from trial_progression import checkpoint_mission_is_available
+    return [row for row in rows if not row.get('qo3PECw6')
+            or checkpoint_mission_is_available(player, row['qo3PECw6'])]
+
+
 def _unlock_enhance_missions(spec, player, gate_rows, mission_rows, enhance_areas):
     """Permanently unlock every mission in the Enhance areas the client is currently showing."""
     if player is None or player.mode == 'frozen':
@@ -3142,8 +3148,11 @@ def serve_event_gate(spec, reply_id):
     unlocked_rows = [r for r in rows if str(r.get('uv60hgDW')) not in locked]
     removed_locked = len(unlocked_rows) != len(rows)
     rows = unlocked_rows
+    available_rows = _filter_checkpoint_gate_rows(State.player, rows)
+    removed_checkpoint_missions = len(available_rows) != len(rows)
+    rows = available_rows
     if not facts:
-        if removed_locked:
+        if removed_locked or removed_checkpoint_missions:
             spec[EVENT_GATE_TAG] = rows
         return spec
     # Quests a later run added are held back this week (event_archive.only_existing_quests), shipped rows too
@@ -3156,7 +3165,7 @@ def serve_event_gate(spec, reply_id):
     else:
         gate_dropped = False
     have = {str(r.get("uv60hgDW")) for r in rows}
-    gate_changed = gate_dropped or removed_locked
+    gate_changed = gate_dropped or removed_locked or removed_checkpoint_missions
     selected = {f[0] for f in facts}
     from exvius_raid_progress import personal_event
     raids = {area: personal_event(dungeon_id=dungeon) for area, dungeon, _mission in facts}
@@ -3211,7 +3220,9 @@ def serve_event_gate(spec, reply_id):
     missions_by_area = {}
     for mission_row in event_missions:
         area = str(mission_row.get('uv60hgDW') or '')
-        if area in selected and (archive_missions is None or str(mission_row.get('qo3PECw6')) in archive_missions):
+        mid = str(mission_row.get('qo3PECw6') or '')
+        if (area in selected and mid and checkpoint_mission_is_available(State.player, mid)
+                and (archive_missions is None or mid in archive_missions)):
             missions_by_area.setdefault(area, []).append(mission_row)
     present_missions = {str(row.get('qo3PECw6')) for row in rows}
     for area, dungeon, _mission in facts:

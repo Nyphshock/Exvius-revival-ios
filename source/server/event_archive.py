@@ -218,6 +218,9 @@ def filter_events_by_story(rows, player):
 
         keep = []
         for mission in missions:
+            from trial_progression import checkpoint_mission_is_available
+            if not checkpoint_mission_is_available(player, mission):
+                continue
             if mission in active or (active_dungeons and _mission_dungeon(mission) in active_dungeons):
                 keep.append(mission)
                 continue
