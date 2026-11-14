@@ -16,7 +16,11 @@ COLLABORATIONS = (
 GROUPS = (('standard', 'Standard'),) + tuple((season, SEASON_LABELS[season]) for season in SEASON_IDS) + (
     ('collaborations', 'Collab'),)
 # Always-available summons, shown with every group (as on the live game).
-PERMANENT_NAMES = {'Standard Summon', 'Rare Summon', 'Premium 10+1 Summon', '5★ Guaranteed 10+1 Summon'}
+PERMANENT_NAMES = {'Standard Summon'}
+REMOVED_SUMMON_NAMES = frozenset({
+    'Rare Summon', 'Premium 10+1 Summon', '5★ Guaranteed 10+1 Summon',
+    '5+1 Ticket Summon', 'EXVIUS Summon', 'NV EXVIUS Summon',
+})
 # Original GL9 tab of each GachaMst type code: GachaTopScene::setListLayout
 # (0x2120554) files a banner by GachaMst::isPayType / isFreeType (0, 6, 900) /
 # isLimitedType (50, 7).
@@ -75,6 +79,8 @@ def _standard_families():
 
 def permanent(banner, families=None):
     families = _standard_families() if families is None else families
+    if banner.get('name') in REMOVED_SUMMON_NAMES:
+        return False
     return (str(banner['id']) in families or banner.get('name') in PERMANENT_NAMES
             or banner.get('type') == 'friend' or bool(banner.get('permanent')))
 
@@ -246,6 +252,8 @@ def filter_redundant_featured(banners):
 
 
 def _banner_unlocked(banner, families, player=None):
+    if banner.get('name') in REMOVED_SUMMON_NAMES:
+        return False
     if (str(banner.get('id') or '') in families or banner.get('name') in PERMANENT_NAMES
             or banner.get('type') == 'friend'):
         return True

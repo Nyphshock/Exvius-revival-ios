@@ -19,6 +19,40 @@ _EVENT_NAMES_BY_AREA = None
 _VORTEX_TABS = None
 REPLAY_LOOKBACK_DAYS = 14   # first replay week: events still running when the replay starts
 
+# The archive has no Global release field for these recurring/legacy Vortex areas.
+# Unknown non-permanent events are hidden for gated profiles unless dated here or
+# in event_history.json / content/event_quest_dates.json.
+EVENT_RELEASE_OVERRIDES = {
+    '218': '0001-01-01',       # Cactuar Dunes: launch-era permanent rotation
+    '219': '0001-01-01',       # Gil Snapper's Cave: launch-era permanent rotation
+    '1038': '0001-01-01',      # Daily Gil Hunt: launch-era daily content
+    '909': '2019-07-25',       # Series Boss Battle first appeared in Global
+    '1041': '2020-12-01',      # Monthly Fortune Hunt I
+    '1045': '2020-12-01',      # Monthly Fortune Hunt II
+    '1052': '2020-12-01',      # Monthly Fortune Hunt III
+    '1054': '2020-12-01',      # Monthly Fortune Hunt IV
+    '1096': '2022-02-24',      # Daily Eggstravaganza
+    '3122': '2020-07-30', '3123': '2020-07-30', '3124': '2020-07-30',
+    '3140': '2021-02-18', '3141': '2021-02-18', '3142': '2021-02-18',
+    '1029': '2020-09-17', '1030': '2020-09-17', '1031': '2020-09-17',
+    '3158': '2020-08-27', '3167': '2020-11-05', '3200': '2020-12-03',
+    '3213': '2021-01-14',
+}
+MISSION_RELEASE_OVERRIDES = {
+    '9091101': '2019-08-29', '99580101': '2024-07-05',  # Neo Exdeath / EXT
+    '9091102': '2019-07-25', '99600101': '2024-07-05',  # Chaotic Darkness / EXT
+    '9091103': '2019-11-28', '99570101': '2024-07-05',  # Kefka / EXT
+    '9091104': '2019-10-10',                            # Emperor
+    '9091105': '2020-01-16',                            # Chaos
+    '9091107': '2019-12-12',                            # Ardyn
+    '9091108': '2020-02-13',                            # Zeromus
+    '9091111': '2020-03-12',                            # Braska's Final Aeon
+    '9091112': '2021-01-21',                            # Shadow Lord
+    '9091113': '2020-11-12', '99590101': '2024-07-05',  # Vlad / EXT
+    '9091116': '2021-09-23',                            # The Rursan Arbiter
+    '9091118': '2021-10-14', '99460101': '2023-09-28',  # Safer-Sephiroth / EXT
+}
+
 
 def history():
     """event_history.json: Global run dates the archive lacks (first runs, reruns) and events it lacks."""
@@ -120,7 +154,7 @@ def mission_is_available(player, mission):
     if active_dungeons and _mission_dungeon(mission) in active_dungeons:
         return True
 
-    release = checkpoint_date_for_mission(mission)
+    release = checkpoint_date_for_mission(mission) or MISSION_RELEASE_OVERRIDES.get(mission)
     if release is None:
         dates = quest_dates()
         release = (dates.get('missions') or {}).get(mission)
@@ -128,12 +162,9 @@ def mission_is_available(player, mission):
             for row in events():
                 if mission not in {str(mid) for mid in row.get('missions') or []}:
                     continue
-                release = row.get('first_release') or row.get('release')
-                if release is None and row.get('runs'):
-                    release = min(row['runs'])
-                if release is None:
-                    release = ((dates.get('events') or {}).get(str(row['area']))
-                               or (dates.get('introduced') or {}).get(str(row['area'])))
+                release = _event_release_date(row, dates)
+                if release is None and row.get('group') != 'permanent':
+                    return False
                 break
     return release_is_available(player, release)
 
@@ -144,8 +175,6 @@ def filter_events_by_story(rows, player):
         return rows
 
     dates = quest_dates()
-    event_dates = dates.get('events') or {}
-    introduced = dates.get('introduced') or {}
     mission_dates = dates.get('missions') or {}
     active = active_checkpoint_missions(player)
     active_dungeons = {_mission_dungeon(mission) for mission in active}
@@ -153,15 +182,12 @@ def filter_events_by_story(rows, player):
     out = []
     for row in rows:
         area = str(row.get('area') or '')
-        release_dates = [row[key] for key in ('first_release', 'release') if row.get(key)]
-        release_dates.extend(row.get('runs') or [])
-        release_dates.extend(window[0] for window in row.get('windows') or [] if window and window[0])
-        if not release_dates:
-            permanent_release = event_dates.get(area) or introduced.get(area)
-            if permanent_release:
-                release_dates.append(permanent_release)
-        area_release = min(release_dates) if release_dates else None
+        area_release = _event_release_date(row, dates)
         missions = [str(mission) for mission in row.get('missions') or []]
+        if area_release is None and row.get('group') != 'permanent' and not any(
+                mission_dates.get(mission) or checkpoint_date_for_mission(mission)
+                for mission in missions):
+            continue
         if not missions:
             if release_is_available(player, area_release):
                 out.append(row)
@@ -172,8 +198,9 @@ def filter_events_by_story(rows, player):
             if mission in active or (active_dungeons and _mission_dungeon(mission) in active_dungeons):
                 keep.append(mission)
                 continue
-            mission_release = (checkpoint_date_for_mission(mission) or mission_dates.get(mission)
-                               or area_release)
+            mission_release = (checkpoint_date_for_mission(mission)
+                               or MISSION_RELEASE_OVERRIDES.get(mission)
+                               or mission_dates.get(mission) or area_release)
             if release_is_available(player, mission_release):
                 keep.append(mission)
         if not keep:
@@ -200,6 +227,19 @@ def filter_events_by_story(rows, player):
                         dungeons=dungeons or row.get('dungeons'), first_mission=first,
                         first_dungeon=dungeon_by_mission.get(first) or row.get('first_dungeon')))
     return out
+
+
+def _event_release_date(row, dates=None):
+    dates = quest_dates() if dates is None else dates
+    area = str(row.get('area') or '')
+    release_dates = [row[key] for key in ('first_release', 'release') if row.get(key)]
+    release_dates.extend(row.get('runs') or [])
+    release_dates.extend(window[0] for window in row.get('windows') or [] if window and window[0])
+    release_dates.extend(((dates.get('events') or {}).get(area),
+                          (dates.get('introduced') or {}).get(area),
+                          EVENT_RELEASE_OVERRIDES.get(area)))
+    release_dates = [str(release) for release in release_dates if release]
+    return min(release_dates) if release_dates else None
 
 
 def locked_event_areas(player):

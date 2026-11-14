@@ -6,6 +6,8 @@ Each entry is one update to this repo. To update: in your repo folder run `git p
 
 - Each profile's next uncleared trial checkpoint limits dated Vortex events, summon banners and Home event banners. The active trial remains playable at every difficulty; all trials sharing a checkpoint date must be cleared before progression advances.
 - Direct Vortex mission loads are checked server-side. After the final checkpoint, dated content is limited to Global's 2024-10-30 closure.
+- Undated recurring Vortex events now require a known first-release date. Daily Eggstravaganza, Monthly Fortune Hunt and each Series Boss Battle unlock only from their historical Global release.
+- Removed the Rare, Premium 10+1, 5★ Guaranteed 10+1, 5+1 Ticket and EXVIUS summons; the regular Standard Summon remains.
 - The per-checkpoint main-story mission cap is not included yet; exact mission IDs for the named story destinations still need to be resolved.
 
 ## 2026-11-13: Farplane exchanges for owned currencies
