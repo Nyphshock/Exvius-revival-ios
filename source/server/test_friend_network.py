@@ -1,3 +1,4 @@
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -196,7 +197,7 @@ class FriendNetworkTests(unittest.TestCase):
         self.assertEqual(reply[ffbe_friends.FRIENDLIST_TAG], [
             {"m3Wghr1j": "300000002", "8zE6w9RP": "0"}])
 
-    def test_reinforcement_reply_serves_all_five_companion_tabs(self):
+    def test_reinforcement_reply_serves_only_requested_companion_tab(self):
         import ffbe_friends
         st.State.player = SimpleNamespace(
             data={"identity": {"user_id": "300000001"}, "counts": {"friend": 1}},
@@ -204,16 +205,19 @@ class FriendNetworkTests(unittest.TestCase):
         profiles = [{"friend_id": 300000002, "support_tab": tab, "unit": {"vision_card": ""}}
                     for tab in range(1, 6)]
         with patch.object(ffbe_friends, "all_friends", return_value=[profiles[0]]), \
-                patch.object(ffbe_friends, "all_support_profiles", return_value=profiles), \
+                patch.object(ffbe_friends, "all_support_profiles",
+                             side_effect=lambda tab: [p for p in profiles if p["support_tab"] == tab]), \
                 patch.object(ffbe_friends, "_reinforce_row",
                              side_effect=lambda friend: {"m3Wghr1j": str(friend["friend_id"]),
                                                         "Y58ENcB4": str(friend["support_tab"])}), \
                 patch.object(ffbe_friends, "_friend_list_row", return_value={"m3Wghr1j": "300000002"}), \
                 patch.object(ffbe_friends, "_suggestion_rows", return_value=[]):
-            reply = ffbe_friends.serve_friends({}, ffbe_friends.REINFORCE_REPLY)
-
-        self.assertEqual([row["Y58ENcB4"] for row in reply[ffbe_friends.REINFORCE_TAG]],
-                         ["1", "2", "3", "4", "5"])
+            for tab in range(1, 6):
+                request = json.dumps({"I53AVzSo": [{"Y58ENcB4": str(tab)}]})
+                reply = ffbe_friends.serve_friends({}, ffbe_friends.REINFORCE_REPLY, request)
+                rows = reply[ffbe_friends.REINFORCE_TAG]
+                self.assertEqual(len(rows), 1)
+                self.assertEqual(rows[0]["Y58ENcB4"], str(tab))
 
     def test_native_friend_request_saves_pending_and_returns_friend_row(self):
         import exvius_actions_arena

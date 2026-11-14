@@ -409,7 +409,7 @@ PIPELINE: tuple = (
          "ShopUseRequest shopId 21 -> fill the family to cap and spend its shipped useDia (100 lapis)"),
     # REAL FRIENDS (APP-13): accepted registered profiles fill the support/companion list and friends area.
     # Profile helpers are resolved from each user's active party; an empty accepted list remains empty.
-    Step("serve_friends", lambda c: serve_friends(c.spec, c.reply_id),
+     Step("serve_friends", lambda c: serve_friends(c.spec, c.reply_id, c.plaintext),
          "spec", "9Tp2fiyB / I53AVzSo / 56gJBnVh",
          "registered real profiles -> the support list + the friends area"),
     Step("sync_friend_count", lambda c: sync_friend_count(c.spec, c.reply_id),

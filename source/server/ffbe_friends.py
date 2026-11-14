@@ -19,6 +19,7 @@ already proves). Offline check without the client:
 from __future__ import annotations
 
 import os
+import json
 import time
 
 from player_state import (STAT_TOKENS, TEAM_NEED_EXP, UNIT_KEY, beast_stats, unit_stats,
@@ -130,17 +131,33 @@ def all_friends() -> list:
             if (friend := friend_network.friend_profile(target)) is not None]
 
 
-def all_support_profiles() -> list:
-    """The accepted friends' configured Favorite/Event/Nemesis units for the support picker."""
+def all_support_profiles(support_tab=1) -> list:
+    """The accepted friends' configured units for the requested Companion tab."""
     import friend_network
     owner = friend_network.current_id()
     supports = []
     for target in friend_network.friend_ids(owner, relation=1):
-        for tab in range(1, 6):
-            profile = friend_network.friend_profile(target, support_tab=tab)
-            if profile is not None:
-                supports.append(profile)
+        profile = friend_network.friend_profile(target, support_tab=support_tab)
+        if profile is not None:
+            supports.append(profile)
     return supports
+
+
+def _requested_support_tab(plaintext):
+    if not plaintext:
+        return 1
+    try:
+        request = json.JSONDecoder().raw_decode(plaintext)[0]
+    except (TypeError, ValueError):
+        return 1
+    rows = request.get(FRIENDINFO_TAG) if isinstance(request, dict) else None
+    if not isinstance(rows, list) or not rows or not isinstance(rows[0], dict):
+        return 1
+    try:
+        tab = int(rows[0].get(Y58ENcB4_KEY, 1))
+    except (TypeError, ValueError):
+        return 1
+    return tab if tab in range(1, 6) else 1
 
 
 def _anyone(friend_id) -> dict | None:
@@ -263,16 +280,16 @@ def _request_list_row(friend_id, category, now):
     return row
 
 
-def serve_friends(spec, reply_id=None):
+def serve_friends(spec, reply_id=None, plaintext=None):
     """Project real friends into the native friend-list and reinforcement replies."""
     if not isinstance(spec, dict):
         return spec
     if reply_id in BOOT_REPLIES:
-        return serve_friends(spec, FRIENDLIST_REPLY)
+        return serve_friends(spec, FRIENDLIST_REPLY, plaintext)
     friends = all_friends()
     out = dict(spec)
     if reply_id == REINFORCE_REPLY and isinstance(spec, dict):
-        supports = all_support_profiles()
+        supports = all_support_profiles(_requested_support_tab(plaintext))
         out[REINFORCE_TAG] = [_reinforce_row(f) for f in supports]
         # The card list the support screen resolves through. Its own tag, NON-clearing (see VCINFO_TAG).
         cards = [_vc_info_row(f, f["unit"]["vision_card"])
@@ -285,7 +302,7 @@ def serve_friends(spec, reply_id=None):
         group = list(out.get(FRIENDINFO_TAG) or [])
         group.insert(0, {"0NVFk2fD": DEL_FRIEND_INFO, "H4zD2IQ5": WAIT_NO_WAIT})
         out[FRIENDINFO_TAG] = group
-        return serve_friends(out, FRIENDLIST_REPLY)
+        return serve_friends(out, FRIENDLIST_REPLY, plaintext)
     if reply_id == FRIENDLIST_REPLY:
         now = time.strftime(FRIEND_LIST_DATE_FMT)
         if FRIEND_LIST_ENABLED:
