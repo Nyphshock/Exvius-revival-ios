@@ -234,14 +234,23 @@ def _row(entry: dict, now: datetime) -> tuple[dict, dict]:
     return row, provenance
 
 
-def marquee_rows(now: datetime | None = None) -> list:
+def _filter_entries_for_player(entries: list, player) -> list:
+    if player is None:
+        return entries
+    from trial_progression import release_is_available
+    return [entry for entry in entries
+            if not entry.get('start') or release_is_available(player, entry.get('start'))]
+
+
+def marquee_rows(now: datetime | None = None, player=None) -> list:
     """The wire rows for the active selection. Empty when the feature is off."""
-    rows, _ = _rows_with_provenance(now)
+    rows, _ = _rows_with_provenance(now, player)
     return rows
 
 
-def _rows_with_provenance(now: datetime | None = None) -> tuple[list, list]:
+def _rows_with_provenance(now: datetime | None = None, player=None) -> tuple[list, list]:
     label, entries = banner_selection()
+    entries = _filter_entries_for_player(entries, player)
     if not entries:
         return [], []
     now = now or _now()
@@ -286,7 +295,8 @@ def serve_home_marquee(spec, reply_id: str | None = None):
     """
     if not isinstance(spec, dict):
         return spec
-    rows = marquee_rows() if MARQUEE_FLAG in ("1", "flag") else []
+    import ffbe_state
+    rows = marquee_rows(player=ffbe_state.State.player) if MARQUEE_FLAG in ("1", "flag") else []
     enabled = MARQUEE_FLAG == "flag" or (MARQUEE_FLAG == "1" and bool(rows))
     has_group = isinstance(spec.get(MARQUEE_GROUP), list)
     flagged = [key for key, value in spec.items()

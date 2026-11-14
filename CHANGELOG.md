@@ -2,6 +2,13 @@
 
 Each entry is one update to this repo. To update: in your repo folder run `git pull`, then from `ios-server` run `docker compose build && docker compose up -d`. Your save isn't touched. Open the game twice afterwards so it picks up the new data.
 
+## 2026-11-14: Trial checkpoint progression
+
+- Each profile's next uncleared trial checkpoint limits dated Vortex events, summon banners and Home event banners. The active trial remains playable at every difficulty; all trials sharing a checkpoint date must be cleared before progression advances.
+- Direct Vortex mission loads are checked server-side. After the final checkpoint, dated content is limited to Global's 2024-10-30 closure.
+- Added the historical meta and trial/story availability research CSVs. Corrected the Alhena and Warden Welter release dates in the trial/story CSV.
+- The per-checkpoint main-story mission cap is not included yet; exact mission IDs for the named story destinations still need to be resolved.
+
 ## 2026-11-13: Farplane exchanges for owned currencies
 
 - The Moogle Guard Captain lists every catalogued exchange with stock for currencies you hold, including exchanges not yet reached by the replay.

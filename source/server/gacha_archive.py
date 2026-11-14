@@ -4,7 +4,7 @@ from datetime import date
 import json
 from pathlib import Path
 
-from story_seasons import SEASON_IDS, SEASON_LABELS, season_for_date, unlocked_seasons
+from story_seasons import SEASON_IDS, SEASON_LABELS, SEASON_STARTS, season_for_date
 
 
 COLLABORATIONS = (
@@ -188,9 +188,9 @@ def _banner_season(banner):
 
 
 def banner_unlocked(player, banner, families=None):
-    """Story-dated banners unlock cumulatively; stock friend/standard summons remain available."""
+    """Dated banners unlock only after the player's next trial checkpoint."""
     families = _standard_families() if families is None else families
-    return _banner_unlocked(banner, families, unlocked_seasons(player))
+    return _banner_unlocked(banner, families, player)
 
 
 def featured_unit_ids(banner):
@@ -245,19 +245,27 @@ def filter_redundant_featured(banners):
     return [banner for banner in banners if str(banner['id']) in keep_ids]
 
 
-def _banner_unlocked(banner, families, unlocked):
+def _banner_unlocked(banner, families, player=None):
     if (str(banner.get('id') or '') in families or banner.get('name') in PERMANENT_NAMES
             or banner.get('type') == 'friend'):
         return True
+    if player is None:
+        return True
+    released = _released(banner)
+    if released:
+        from trial_progression import release_is_available
+        return release_is_available(player, released)
     season = _banner_season(banner)
-    return season is None or season in unlocked
+    if season is None:
+        return False
+    from trial_progression import release_is_available
+    return release_is_available(player, SEASON_STARTS[season])
 
 
 def filter_banners_for_story(player, banners):
-    """Keep banners whose story checkpoint has been cleared, without changing archive selection."""
+    """Keep banners older than the player's next trial checkpoint."""
     families = _standard_families()
-    unlocked = unlocked_seasons(player)
-    return [banner for banner in banners if _banner_unlocked(banner, families, unlocked)]
+    return [banner for banner in banners if _banner_unlocked(banner, families, player)]
 
 
 def rotation_banners_for_story(player, banners):
@@ -270,10 +278,9 @@ def rotation_banners_for_story(player, banners):
     ids = list(dict.fromkeys(rotation_ids(eligible) + held_ticket_ids(player, eligible)))
     import replay
     if replay.enabled():
-        unlocked = unlocked_seasons(player)
         families = _standard_families()
         ids.extend(str(banner['id']) for banner in eligible
-                   if not permanent(banner, families) and _banner_season(banner) in unlocked)
+                   if not permanent(banner, families))
     ids = dict.fromkeys(ids)
     return [by_id[bid] for bid in ids if bid in by_id]
 
@@ -412,7 +419,7 @@ def visible_banners(player, banners):
     if enabled():
         ids = [str(banner['id']) for banner in rotation_banners_for_story(player, banners)]
     else:
-        # Rotation off exposes the full archive by default, while the story-season filter below still applies.
+        # Rotation off exposes the selected archive, while the checkpoint date still applies.
         groups = catalogue(banners)
         chosen = (player.data.get('summon_archive') if player else None) or 'all'
         group = next((g for g in groups if g['id'] == chosen), None)
@@ -423,9 +430,8 @@ def visible_banners(player, banners):
     # as on Global, rather than staying greyed out (2026-11-07, deal banners). Same for a step-up whose
     # rounds are all done.
     families = _standard_families()
-    unlocked = unlocked_seasons(player)
     ids = [bid for bid in ids if bid in by_id
-           and _banner_unlocked(by_id[bid], families, unlocked)
+            and _banner_unlocked(by_id[bid], families, player)
            and not used_up(player, by_id[bid])]
     # GL9 sorts schedule rows by descending display order. Publish the archive's
     # series/date order there, rather than preserving unrelated old campaign ranks.
@@ -449,20 +455,14 @@ def menu(player, banners, selection=''):
         ids = [str(banner['id']) for banner in rotation_banners_for_story(player, banners)]
         week = {'id': 'rotation', 'label': 'This Week', 'count': len(ids), 'tab': 0}
         return {'groups': [week], 'selected': week}
-    # Keep story-locked seasons out of the chooser; "All Summons" is filtered the same way as individual groups.
+    # Keep the chooser and every group aligned with the per-profile checkpoint cutoff.
     story_eligible = filter_banners_for_story(player, banners)
     everything = {'id': 'all', 'label': 'All Summons', 'count': len(all_ids(story_eligible)), 'tab': 0}
-    groups = catalogue(banners)
-    unlocked = unlocked_seasons(player)
-    groups = [group for group in groups
-              if group['id'] not in SEASON_IDS or group['id'] in unlocked]
+    groups = catalogue(story_eligible)
     if 'collaborations' in {group['id'] for group in groups}:
-        by_id = {str(banner['id']): banner for banner in banners}
-        families = _standard_families()
-        unlocked = unlocked_seasons(player)
+        by_id = {str(banner['id']): banner for banner in story_eligible}
         collabs = next(group for group in groups if group['id'] == 'collaborations')
-        collabs['ids'] = [bid for bid in collabs['ids']
-                          if bid in by_id and _banner_unlocked(by_id[bid], families, unlocked)]
+        collabs['ids'] = [bid for bid in collabs['ids'] if bid in by_id]
         collabs['count'] = sum(not permanent(by_id[bid]) for bid in collabs['ids'])
     groups.insert(0, everything)
     if selection:

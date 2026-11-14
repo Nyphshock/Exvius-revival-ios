@@ -5,6 +5,8 @@ import json
 from pathlib import Path
 
 from story_seasons import SEASON_IDS, SEASON_LABELS, season_for_date, season_unlocked, unlocked_seasons
+from trial_progression import (active_checkpoint_missions, checkpoint_date_for_mission,
+                               next_checkpoint_date, release_is_available)
 
 GROUPS = (('all', 'All Events'), ('permanent', 'Permanent')) + tuple(
     (season, SEASON_LABELS[season]) for season in SEASON_IDS
@@ -99,20 +101,112 @@ def event_season(row):
     return group if group in SEASON_IDS else None
 
 
+def _mission_dungeon(mission):
+    try:
+        from player_state import mission_row
+        return str((mission_row(mission) or {}).get('U9iHsau3') or '')
+    except OSError:
+        return ''
+
+
+def mission_is_available(player, mission):
+    """Whether a direct mission load is allowed by the player's active checkpoint."""
+    mission = str(mission)
+    active = active_checkpoint_missions(player)
+    if player is None or mission in active:
+        return True
+    active_dungeons = {_mission_dungeon(mid) for mid in active}
+    active_dungeons.discard('')
+    if active_dungeons and _mission_dungeon(mission) in active_dungeons:
+        return True
+
+    release = checkpoint_date_for_mission(mission)
+    if release is None:
+        dates = quest_dates()
+        release = (dates.get('missions') or {}).get(mission)
+        if release is None:
+            for row in events():
+                if mission not in {str(mid) for mid in row.get('missions') or []}:
+                    continue
+                release = row.get('first_release') or row.get('release')
+                if release is None and row.get('runs'):
+                    release = min(row['runs'])
+                if release is None:
+                    release = ((dates.get('events') or {}).get(str(row['area']))
+                               or (dates.get('introduced') or {}).get(str(row['area'])))
+                break
+    return release_is_available(player, release)
+
+
 def filter_events_by_story(rows, player):
-    if player is None:
+    limit = next_checkpoint_date(player)
+    if limit is None:
         return rows
-    unlocked = unlocked_seasons(player)
-    return [row for row in rows
-            if (season := event_season(row)) is None or season in unlocked]
+
+    dates = quest_dates()
+    event_dates = dates.get('events') or {}
+    introduced = dates.get('introduced') or {}
+    mission_dates = dates.get('missions') or {}
+    active = active_checkpoint_missions(player)
+    active_dungeons = {_mission_dungeon(mission) for mission in active}
+    active_dungeons.discard('')
+    out = []
+    for row in rows:
+        area = str(row.get('area') or '')
+        release_dates = [row[key] for key in ('first_release', 'release') if row.get(key)]
+        release_dates.extend(row.get('runs') or [])
+        release_dates.extend(window[0] for window in row.get('windows') or [] if window and window[0])
+        if not release_dates:
+            permanent_release = event_dates.get(area) or introduced.get(area)
+            if permanent_release:
+                release_dates.append(permanent_release)
+        area_release = min(release_dates) if release_dates else None
+        missions = [str(mission) for mission in row.get('missions') or []]
+        if not missions:
+            if release_is_available(player, area_release):
+                out.append(row)
+            continue
+
+        keep = []
+        for mission in missions:
+            if mission in active or (active_dungeons and _mission_dungeon(mission) in active_dungeons):
+                keep.append(mission)
+                continue
+            mission_release = (checkpoint_date_for_mission(mission) or mission_dates.get(mission)
+                               or area_release)
+            if release_is_available(player, mission_release):
+                keep.append(mission)
+        if not keep:
+            continue
+        if len(keep) == len(missions):
+            out.append(row)
+            continue
+        try:
+            from player_state import mission_row
+            dungeon_by_mission = {
+                mission: str((mission_row(mission) or {}).get('U9iHsau3') or '')
+                for mission in keep
+            }
+        except OSError:
+            dungeon_by_mission = {}
+        kept_dungeons = {dungeon for dungeon in dungeon_by_mission.values() if dungeon}
+        dungeons = [str(dungeon) for dungeon in row.get('dungeons') or []]
+        if kept_dungeons:
+            dungeons = [dungeon for dungeon in dungeons if dungeon in kept_dungeons]
+        first = keep[0]
+        out.append(dict(row, missions=keep,
+                        held_back=list(row.get('held_back') or []) + [mission for mission in missions
+                                                                        if mission not in keep],
+                        dungeons=dungeons or row.get('dungeons'), first_mission=first,
+                        first_dungeon=dungeon_by_mission.get(first) or row.get('first_dungeon')))
+    return out
 
 
 def locked_event_areas(player):
     if player is None:
         return set()
-    unlocked = unlocked_seasons(player)
-    return {str(row['area']) for row in events()
-            if (season := event_season(row)) is not None and season not in unlocked}
+    visible = {str(row['area']) for row in filter_events_by_story(events(), player)}
+    return {str(row['area']) for row in events() if str(row['area']) not in visible}
 
 
 def filter_event_areas(areas, player):
@@ -328,17 +422,14 @@ def vortex_events(player, now=None):
 
     current_areas = {str(row['area']) for row in current}
     current_looks = {(row['name'], art_key(row)) for row in current}
-    unlocked = unlocked_seasons(player)
     seasonal = []
-    for row, _aliases in listings():
-        season = event_season(row)
+    archived = filter_events_by_story([row for row, _aliases in listings()], player)
+    for row in archived:
         area = str(row['area'])
-        if (season not in unlocked or area in current_areas or area in hidden_areas()
+        if (area in current_areas or area in hidden_areas()
                 or (row['name'], art_key(row)) in current_looks):
             continue
-        runs = [str(run) for run in row.get('runs') or [row.get('release')]
-                if run and season_for_date(run) == season]
-        seasonal.append(dict(row, release=max(runs) if runs else row.get('release')))
+        seasonal.append(row)
 
     seasonal = _one_per_look(seasonal, lambda group: min(group, key=lambda row: int(row['area'])))
     seasonal.sort(key=lambda row: (str(row.get('release') or ''), int(row['area'])), reverse=True)
@@ -574,7 +665,7 @@ def menu(player, selection=''):
             members[group].append(area)
     groups = []
     for key, label in GROUPS:
-        if key in SEASON_IDS and key not in unlocked_seasons(player):
+        if key in SEASON_IDS and not members[key]:
             continue
         ids = [str(row['area']) for row in rows] if key == 'all' else members[key]
         groups.append({'id': key, 'label': label, 'ids': ids, 'count': len(ids), 'tab': 0})
@@ -627,7 +718,8 @@ def activate_mode(player, selection):
     from exvius_actions_modes import _tfa, _parade
     from player_state import _load_ndjson
     mode, did = selection.split(':', 1)
-    allowed = {str(row['area']): row.get('native_mode') for row in events()}
+    allowed = {str(row['area']): row.get('native_mode')
+               for row in filter_events_by_story(events(), player)}
     rows = [r for r in _load_ndjson('F_MISSION_MST.ndjson', 'qo3PECw6').values()
             if str(r.get('U9iHsau3')) == did and str(r.get('gQR24kST')) in ('12', '50')]
     if (player is None or player.mode == 'frozen' or not rows or mode not in ('tfa', 'parade')

@@ -220,6 +220,13 @@ class Handler(BaseHTTPRequestHandler):
         reload_season_if_changed()
         warn_if_source_is_newer()
         mid = mission_id_from(plaintext)
+        checkpoint_denied = False
+        if mid and reply_id == BATTLE_BUNDLE_REPLY_ID and State.player is not None:
+            try:
+                from event_archive import mission_is_available
+                checkpoint_denied = not mission_is_available(State.player, mid)
+            except (OSError, ValueError) as exc:
+                st.NOTES.append(f"checkpoint lookup unavailable for mission {mid}: {exc}")
         if mid:
             spec = State.replies.get(f"{reply_id}@{mid}")
             if spec is not None:
@@ -320,6 +327,9 @@ class Handler(BaseHTTPRequestHandler):
         # `reply_pipeline` (extracted 2026-09-26, a pure move; see its docstring and
         # docs/SERVER_REFACTOR_PLAN.md Phase 2). Everything that is the REQUEST's I/O rather than the
         # REPLY's construction -- dispatch, the hot-reload checks, the record, the envelope -- stays here.
+        if checkpoint_denied:
+            missing_battle = f"mission {mid}: checkpoint is not yet cleared"
+            spec, spec_key, bundle_source = None, None, None
         if missing_battle is None:
             import client_message
             client_message.clear()
