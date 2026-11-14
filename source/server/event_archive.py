@@ -160,6 +160,18 @@ def mission_is_available(player, mission):
     active = active_checkpoint_missions(player)
     if player is None or mission in active:
         return True
+    from trial_progression import checkpoint_mission_is_available
+    if not checkpoint_mission_is_available(player, mission):
+        return False
+    try:
+        from player_state import is_main_story_mission
+        is_story = is_main_story_mission(mission)
+    except OSError:
+        is_story = False
+    if is_story:
+        from trial_progression import story_mission_is_available
+        if not story_mission_is_available(player, mission):
+            return False
     active_dungeons = {_mission_dungeon(mid) for mid in active}
     active_dungeons.discard('')
     if active_dungeons and _mission_dungeon(mission) in active_dungeons:

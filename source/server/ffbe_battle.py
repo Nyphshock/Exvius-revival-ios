@@ -683,11 +683,15 @@ def _credit_mission_rewards(plaintext: str | None, spec=None):
                     paid.append(f"{int(pts)}rankpt")
     # UNIT EXP -> the roster, and `Qic38SuC` built from it (docs/notes/result_scene_selection.md §7).
     # Build the string BEFORE crediting: its BEFORE half is the current state, its AFTER half the gain.
-    # TRUST from the clear (quest_trust.py): each own party unit rolls once per cleared attempt. Rolled
+    # TRUST from a victory (quest_trust.py): each own party unit gains trust once per cleared battle.
+    # Require a battle log and at least one wave so non-combat explorations don't award trust. Rolled
     # before `Qic38SuC` is built so its halves carry the before/after values; this whole function runs under
     # claim_mission_rewards' once-per-attempt guard and its rollback.
     trust = {}
-    if mission_result_from(plaintext).get('cleared') is True:
+    mission_result = mission_result_from(plaintext)
+    waves = mission_wave_count(mission_id_from(plaintext))
+    if (mission_result.get('cleared') is True and mission_result.get('group_present') is True
+            and waves is not None and waves > 0):
         import quest_trust
         trust = quest_trust.roll(State.player, State.player.party_instance_ids())
         gains = {k: v for k, v in trust.items() if k != '_rewards' and v[1] > v[0]}

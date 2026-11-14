@@ -6,6 +6,7 @@ from unittest.mock import patch
 import event_archive
 import exvius_events
 import ffbe_banner
+import ffbe_player
 import gacha_archive
 import gacha_rotation
 import history_runs
@@ -113,6 +114,26 @@ class ArchiveReplayTests(unittest.TestCase):
         self.assertEqual(out["0xkoNP8U"][1], spec["0xkoNP8U"][1])
         self.assertEqual(spec["0xkoNP8U"][0]["m8ivD4NX"], "2000-01-02 00:00:00")
 
+    def test_present_enhance_missions_are_unlocked_without_cost(self):
+        player = SimpleNamespace(data={}, mode="ephemeral", dirty=False)
+        spec = {"W0E8BHa8": [{"vUCf4Rw3": "other", "zI5a9LPo": "123", "N6hVhvgf": "0"}]}
+        gate_rows = [{"uv60hgDW": "228"}, {"uv60hgDW": "970"}]
+        mission_rows = [
+            {"qo3PECw6": "2280101", "uv60hgDW": "228"},
+            {"qo3PECw6": "2280102", "uv60hgDW": "228"},
+            {"qo3PECw6": "9700101", "uv60hgDW": "970"},
+        ]
+
+        out = ffbe_player._unlock_enhance_missions(spec, player, gate_rows, mission_rows, {"228"})
+
+        self.assertEqual(player.data["exvius_mission_unlock"], {
+            "2280101": 2145916800, "2280102": 2145916800,
+        })
+        self.assertEqual([row["vUCf4Rw3"] for row in out["W0E8BHa8"]],
+                         ["other", "2280101", "2280102"])
+        self.assertEqual(spec["W0E8BHa8"], [{"vUCf4Rw3": "other", "zI5a9LPo": "123", "N6hVhvgf": "0"}])
+        self.assertTrue(player.dirty)
+
     def test_all_difficulties_in_active_trial_dungeon_are_loadable(self):
         player = SimpleNamespace(data={"progress": {"cleared_missions": []}})
         with patch.object(event_archive, "_mission_dungeon",
@@ -120,6 +141,12 @@ class ArchiveReplayTests(unittest.TestCase):
                           else "later"):
             self.assertTrue(event_archive.mission_is_available(player, "8991100"))
             self.assertFalse(event_archive.mission_is_available(player, "8991103"))
+
+    def test_story_mission_after_active_trial_limit_is_denied(self):
+        player = SimpleNamespace(data={"progress": {"cleared_missions": []}})
+        with patch("player_state.is_main_story_mission", return_value=True), \
+                patch("trial_progression.story_mission_is_available", return_value=False):
+            self.assertFalse(event_archive.mission_is_available(player, "4000101"))
 
     def test_home_marquee_hides_checkpoint_date_banners_per_profile(self):
         player = SimpleNamespace(data={"progress": {"cleared_missions": []}})

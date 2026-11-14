@@ -3051,6 +3051,53 @@ def event_gate_art(area):
     return name
 
 
+def _unlock_enhance_missions(spec, player, gate_rows, mission_rows, enhance_areas):
+    """Permanently unlock every mission in the Enhance areas the client is currently showing."""
+    if player is None or player.mode == 'frozen':
+        return spec
+    visible_areas = {str(row.get('uv60hgDW')) for row in gate_rows if isinstance(row, dict)} & set(enhance_areas)
+    mission_ids = {
+        str(row.get('qo3PECw6')) for row in mission_rows
+        if str(row.get('uv60hgDW') or '') in visible_areas and row.get('qo3PECw6')
+    }
+    if not mission_ids:
+        return spec
+
+    expires = 2145916800
+    unlocks = player.data.setdefault('exvius_mission_unlock', {})
+    response_rows = {}
+    for mid in sorted(mission_ids):
+        try:
+            saved = int(unlocks.get(mid, 0) or 0)
+        except (TypeError, ValueError):
+            saved = 0
+        until = max(saved, expires)
+        if saved != until:
+            unlocks[mid] = until
+            player.dirty = True
+        response_rows[mid] = {'vUCf4Rw3': mid, 'zI5a9LPo': str(until), 'N6hVhvgf': '0'}
+
+    out = _as_spec(spec)
+    existing = out.get('W0E8BHa8')
+    merged = {str(row.get('vUCf4Rw3')): dict(row) for row in existing if isinstance(row, dict)} \
+        if isinstance(existing, list) else {}
+    merged.update(response_rows)
+    out['W0E8BHa8'] = list(merged.values())
+    return out
+
+
+def serve_enhance_unlocks(spec, reply_id):
+    """Auto-unlock the Enhance missions in a Vortex gate response, without spending lapis."""
+    if State.player is None or State.player.mode == 'frozen' or reply_id not in EVENT_GATE_CARRIERS:
+        return spec
+    gate_rows = spec.get(EVENT_GATE_TAG) if isinstance(spec, dict) else None
+    if not isinstance(gate_rows, list):
+        return spec
+    from event_archive import enhance_areas
+    mission_rows = _load_mst_rows('F_MISSION_MST.ndjson')['__rows__']
+    return _unlock_enhance_missions(spec, State.player, gate_rows, mission_rows, enhance_areas())
+
+
 def serve_event_gate(spec, reply_id):
     """0xkoNP8U -> one gate row per EVENT_GATE_AREAS area, APPENDED to the carrier's own rows.
 

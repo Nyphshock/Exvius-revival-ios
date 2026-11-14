@@ -51,6 +51,7 @@ from ffbe_player import (apply_carry_edit, apply_emblem_setting, apply_party_edi
                           serve_home_badges, serve_login_bonus, serve_mail,
                           serve_sp_challenge,
                           serve_survival,
+                          serve_enhance_unlocks,
                           serve_switches, serve_unit_exchange, serve_unit_favourite, serve_unit_mix, serve_unit_sell,
                           serve_unit_storage)
 from ffbe_player import serve_lapis_shop
@@ -372,6 +373,9 @@ PIPELINE: tuple = (
     Step("serve_event_gate", lambda c: serve_event_gate(c.spec, c.reply_id),
          "spec", EVENT_GATE_TAG,
          "one gate row per EVENT_GATE_AREAS area: area/dungeon/mission derived, window/tab/art authored"),
+    Step("serve_enhance_unlocks", lambda c: serve_enhance_unlocks(c.spec, c.reply_id),
+         "state", "State.player.exvius_mission_unlock / W0E8BHa8",
+         "automatically open every mission in the Enhance areas shown, without lapis"),
     # The EMBLEM EVENT screen (the crest campaign). ONE request, THREE class-typed groups -- the client's
     # response factory dispatches by tag -- plus one state write: opening the screen delivers the crest-0
     # opening tier. Gated on the request id because the groups are the campaign's own whole answer.
@@ -503,6 +507,10 @@ PIPELINE_EDGES: tuple = (
     Edge("serve_survival", "serve_event_gate", "spec / 0xkoNP8U",
          "BOTH append to the same replace-on-read gate list, so the second must see the first's rows -- "
          "either order works only if each builds on what the other left"),
+    Edge("serve_event_gate", "serve_enhance_unlocks", "spec / 0xkoNP8U",
+         "the auto-unlock step reads the gate rows after the event areas have been added"),
+    Edge("serve_enhance_unlocks", "save_state", "State.player.exvius_mission_unlock",
+         "the free mission unlocks must survive the reply and a server restart"),
     Edge("credit_emblem_objectives", "apply_to_reply", "State.player / mailbox",
          "the crest count and the tier mail are state written on a MissionEnd; the same reply's projections "
          "(and the mailbox screen's own request) read them after, so a later reorder would serve a reply "
