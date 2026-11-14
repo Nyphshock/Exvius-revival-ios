@@ -333,6 +333,9 @@ class Handler(BaseHTTPRequestHandler):
         if missing_battle is None:
             import client_message
             client_message.clear()
+            if (reply_id == BATTLE_BUNDLE_REPLY_ID and spec_key == f"{reply_id}@{mid}"
+                    and isinstance(spec, dict)):
+                spec = battle_content.rebalance_intangir_trial(mid, spec)
             spec = reply_pipeline(spec, reply_id=reply_id, plaintext=plaintext,
                                   mid=None if menu_resource else mid, spec_key=spec_key)
         # Ask a stock client for its own error log, and keep what it uploads (client_reports.py).

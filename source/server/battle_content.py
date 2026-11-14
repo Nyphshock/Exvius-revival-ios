@@ -1031,6 +1031,32 @@ def event_binding(mission: str) -> dict | None:
     return _EVENT_BINDINGS.get(str(mission))
 
 
+def rebalance_intangir_trial(mission: int | str, bundle: dict) -> dict:
+    if str(mission) != '8991101':
+        return bundle
+    parts = bundle.get('bV34YIJQ')
+    if not isinstance(parts, list):
+        return bundle
+    stat_overrides = {
+        'fh31sk7B': '690000',
+        '9NBV1XCS': '420',
+        'Pn5w9dfh': '40',
+        '84FJM3PD': '300',
+        'T8xMDAZ4': '30',
+    }
+    balanced_parts = [
+        dict(part, **stat_overrides)
+        if part.get('xqartN26') == '401011000' and part.get('6Yc4RkdM') == '1'
+        else part
+        for part in parts
+    ]
+    if all(balanced is original for balanced, original in zip(balanced_parts, parts)):
+        return bundle
+    balanced_bundle = dict(bundle)
+    balanced_bundle['bV34YIJQ'] = balanced_parts
+    return balanced_bundle
+
+
 class EventSource(Source):
     """Retarget a sourced encounter while retaining the Global mission row."""
 
