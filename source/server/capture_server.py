@@ -1353,6 +1353,7 @@ def main(argv=None, *, in_process=False) -> int:
         PROFILE_MANAGER = PlayerProfileManager(args.profile_map, auto_create=args.auto_profile_map)
     except ProfileMapError as exc:
         raise SystemExit(f"profile map: {exc}") from exc
+    st.PROFILE_MANAGER = PROFILE_MANAGER
 
     if in_process:
         return 0

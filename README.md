@@ -199,6 +199,10 @@ The certificate used on Android is the same one as iOS, so both devices can play
 2. After you've logged in once, **close the game fully and open it again** (swipe it away in the app switcher). The server's patched download lists only reach the phone during login, after the game has already decided what to fetch up front, so the second launch is the one that gets them. Without it, the first battle can crash.
 3. Music downloads in the background. Until a track has arrived, that scene plays without music; sound effects still work. Leaving the game open on a menu for 10–15 minutes lets it catch up.
 
+### Friends and support units
+
+The server creates a separate player profile for each Tailscale device. Other players must join the same Tailscale network and open the game once to register. Share your numeric Friend ID, search for another player's ID in **Friend → Search**, then send and accept the native friend request. Accepted friends appear in the support list and can lend their own active-party lead unit. Put the unit you want to lend in the first slot of your active party. No simulated friends are preloaded.
+
 ---
 
 ## Other hosts

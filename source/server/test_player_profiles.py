@@ -98,6 +98,25 @@ class PlayerProfileTests(unittest.TestCase):
         self.assertEqual(loaded, ["100000002"])
         self.assertEqual(st.STATE_FILE, "default.json")
 
+    def test_registered_players_can_be_read_without_switching_active_state(self):
+        manager = self._manager()
+        loaded = []
+
+        def fake_load_state():
+            player_id = st.STATE_SLOT
+            st.State.player = _Player(player_id)
+            st.State.state_dirty = False
+            loaded.append(player_id)
+
+        with patch.object(player_profiles, "load_state", side_effect=fake_load_state), \
+                patch.object(player_profiles, "save_state"):
+            self.assertEqual(manager.player_ids(), ["100000001", "100000002"])
+            other = manager.player_for("100000002")
+
+        self.assertEqual(other.data["identity"]["user_id"], "100000002")
+        self.assertEqual(st.State.player.data["identity"]["user_id"], "100000001")
+        self.assertEqual(loaded, ["100000002"])
+
     def test_unknown_peers_are_registered_and_keep_their_ids_after_restart(self):
         manager = player_profiles.PlayerProfileManager(auto_create=True)
 

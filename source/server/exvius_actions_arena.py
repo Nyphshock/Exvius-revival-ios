@@ -1,4 +1,4 @@
-"""Offline arena, board and friend actions, from the v9 reverse-engineering report.
+"""Offline arena, board and real-player friend actions, from the v9 reverse-engineering report.
 
 AUTHORED / UNRESOLVED
 * Replay the most recent shipped short season indefinitely. The offline long season
@@ -11,10 +11,8 @@ AUTHORED / UNRESOLVED
 * The seven original medal boards cycle in master order. Their center reward is
   paid on completion, once per cycle. Original level-1 unit reward descriptors
   and item triples are credited through the authoritative inventory projection.
-* YAML friends initially count as accepted, matching ffbe_friends. Offline peers
-  are represented by local relationships, with no remote user/save to modify.
-  Capacity 100 is authored; pending requests never auto-accept. Removed friends
-  become suggestion candidates. Favorite is local to this player.
+* Friend requests, incoming requests, acceptance and removal use the shared real-player
+    registry; favorites stay local to this player. Capacity 100 is authored.
 
 Two supporting read handlers project the stored relationships on FriendList and
 reinforcement replies, after the legacy ffbe_friends step. Otherwise that step
@@ -27,7 +25,7 @@ import copy
 import time
 
 from exvius_actions import _node, _refresh, _mst
-from ffbe_friends import all_friends as load_friends, _friend_list_row, _reinforce_row, _vc_info_row, VCINFO_TAG
+from ffbe_friends import _friend_list_row, _reinforce_row, _vc_info_row, VCINFO_TAG
 from ffbe_state import State, _note
 
 AUTHORED_FRIEND_CAPACITY = 100
@@ -125,8 +123,9 @@ def rb_entry(spec, req):
         packed = arena_ladder.candidate_entries(listed)
     else:
         candidates = []
-        for friend in load_friends():
-            # Delimiters in a YAML display name must not create extra packed columns.
+        from ffbe_friends import all_friends
+        for friend in all_friends():
+            # Delimiters in a display name must not create extra packed columns.
             name = friend["display_name"].replace(":", " ").replace(",", " ")
             candidates.append(":".join(map(str, (friend["friend_id"], name,
                 friend["unit"]["master_id"], friend["unit"]["level"], 0, 0,
@@ -325,10 +324,20 @@ def clsm_end(spec, req):
 
 
 def _friends():
-    catalog = {str(f["friend_id"]): f for f in load_friends()}
-    saved = State.player.data.get("exvius_friends")
-    state = copy.deepcopy(saved) if saved is not None else {
-        "relations": {fid: {"type": 1, "favorite": 0} for fid in catalog}}
+    import friend_network
+    own = friend_network.current_id()
+    favorites = State.player.data.get("exvius_friends", {}).get("favorites", {})
+    catalog, relations = {}, {}
+    for fid in friend_network.player_ids():
+        if fid == own:
+            continue
+        friend = friend_network.friend_profile(fid)
+        if friend is None:
+            continue
+        category = friend_network.relation_type(own, fid)
+        catalog[fid] = friend
+        relations[fid] = {"type": category, "favorite": int(bool(favorites.get(fid)))}
+    state = {"relations": relations}
     return catalog, state
 
 
@@ -357,7 +366,9 @@ def _ope(out, deleted=""):
 
 
 def _save_friends(state):
-    State.player.data["exvius_friends"] = state
+    saved = State.player.data.setdefault("exvius_friends", {})
+    saved["favorites"] = {fid: bool(row.get("favorite")) for fid, row in state["relations"].items()
+                           if row.get("favorite")}
     State.player.data.setdefault("counts", {})["friend"] = sum(
         r["type"] == 1 for r in state["relations"].values())
     State.player.dirty = True
@@ -368,43 +379,61 @@ def _friend_target(req):
 
 
 def _friend_change(spec, req, action):
+    import friend_network
     catalog, state = _friends()
     target = _friend_target(req)
-    if target not in catalog or target == str(State.player.data["identity"]["user_id"]):
-        return _refuse(spec, "unknown offline friend or self relationship")
+    owner = friend_network.current_id()
+    if target not in catalog or target == owner:
+        return _refuse(spec, "unknown real player or self relationship")
     if not _writable():
         return _refuse(spec, "frozen friend state")
     relation = state["relations"].get(target, {"type": 0, "favorite": 0})
     category = relation["type"]
     accepted = sum(r["type"] == 1 for r in state["relations"].values())
     if action == "agree":
-        if category not in (1, 3) or (category == 3 and accepted >= AUTHORED_FRIEND_CAPACITY):
-            return _refuse(spec, "only incoming requests can be accepted; capacity must be available")
-        relation["type"] = 1
+        if category != 3 or (accepted >= AUTHORED_FRIEND_CAPACITY):
+            return _refuse(spec, "only incoming real-player requests can be accepted; capacity must be available")
+        ok = friend_network.accept_request(owner, target)
     elif action == "request":
-        if category not in (0, 2) or (category == 0 and accepted >= AUTHORED_FRIEND_CAPACITY):
-            return _refuse(spec, "friend already accepted/incoming, or capacity reached")
-        relation["type"] = 2
+        if category not in (0, 2, 3) or (category == 0 and accepted >= AUTHORED_FRIEND_CAPACITY):
+            return _refuse(spec, "friend already accepted/requested, or capacity reached")
+        ok = friend_network.send_request(owner, target)
     elif action == "favorite":
         flag = _int((_node(req, "I53AVzSo") or {}).get("8zE6w9RP"))
         if category != 1 or flag not in (0, 1):
             return _refuse(spec, "favorite requires an accepted friend and flag 0/1")
         relation["favorite"] = flag
+        ok = True
     elif action in ("delete", "refuse"):
-        if category not in ((0, 1) if action == "delete" else (0, 2, 3)):
-            return _refuse(spec, "delete requires accepted friendship; refuse requires pending request")
-        # Keep an explicit tombstone, so YAML defaults do not resurrect the friend.
+        if action == "delete":
+            if category != 1:
+                return _refuse(spec, "delete requires an accepted friendship")
+            ok = friend_network.remove_friend(owner, target)
+        else:
+            if category != 3:
+                return _refuse(spec, "refuse requires an incoming request")
+            ok = friend_network.refuse_request(owner, target)
         relation = {"type": 0, "favorite": 0}
-    state["relations"][target] = relation
+    else:
+        return _refuse(spec, "unsupported friend action")
+    if not ok:
+        return _refuse(spec, "friend relationship changed or request is no longer valid")
     previous_count = State.player.data.get("counts", {}).get("friend", 0)
+    if action == "request" and friend_network.relation_type(owner, target) == 1:
+        relation = {"type": 1, "favorite": 0}
+    elif action == "agree":
+        relation = {"type": 1, "favorite": 0}
+    elif action == "request":
+        relation = {"type": friend_network.relation_type(owner, target), "favorite": 0}
+    state["relations"][target] = relation
     _save_friends(state)
-    if action == 'request' and category == 0:
+    if action == "request" and category == 0:
         from ffbe_player import score_quest_action
         score_quest_action('14')
     if action in ("delete", "refuse"):
         out = _ope(_out(spec), target)
     else:
-        friend = catalog[target]
+        friend = friend_network.friend_profile(target)
         out = _friend_reply(spec, "2vuhy0Ex", [(friend, _friend_row(friend, relation))])
         if action != "favorite":
             _ope(out)  # Never delete the accepted row in the same reply.

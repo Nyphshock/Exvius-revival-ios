@@ -82,6 +82,30 @@ class PlayerProfileManager:
     def default_player_id(self) -> str | None:
         return self._default_id
 
+    def player_ids(self) -> list[str]:
+        """Registered player IDs, including the default profile, in stable order."""
+        self._reload()
+        current_id = str((st.State.player.data.get("identity") or {}).get("user_id", ""))
+        ids = {current_id} if current_id else set()
+        if self._enabled:
+            ids.add(self._default_id)
+            ids.update(self._clients.values())
+        return sorted(ids - {None})
+
+    def player_for(self, player_id: str):
+        """Read a registered profile without changing the active request's player state."""
+        player_id = str(player_id)
+        if player_id not in self.player_ids():
+            return None
+        current_id = str((st.State.player.data.get("identity") or {}).get("user_id", ""))
+        if player_id == current_id:
+            return st.State.player
+        profile = self._profiles.get(player_id)
+        if profile is None:
+            profile = self._load_profile(player_id)
+            self._profiles[player_id] = profile
+        return profile.player
+
     def _reload(self) -> None:
         try:
             stat = os.stat(self.path)

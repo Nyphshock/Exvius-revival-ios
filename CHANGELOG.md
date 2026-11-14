@@ -16,6 +16,10 @@ Each entry is one update to this repo. To update: in your repo folder run `git p
 - Every party unit gains a fixed 5% TMR after each victory, up to its Trust Master cap.
 - Removed the Rare, Premium 10+1, 5★ Guaranteed 10+1, 5+1 Ticket and EXVIUS summons; the regular Standard Summon remains.
 
+## 2026-11-14: Real-player friends
+
+- Removed the preloaded fake friends. Players on registered Tailscale profiles can search by Friend ID, send/accept/refuse requests, remove friends and borrow the first unit in each other's active party. The friend list and support list now use real profiles; synthetic Arena rivals are off by default.
+
 ## 2026-11-14: Enhance drop tables and banner availability
 
 - Enhance dungeon drop pools now preserve each dungeon's own item types, quantities and chances.

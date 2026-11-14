@@ -1,20 +1,12 @@
-"""Other players: 200 made-up accounts you can find, add as friends, borrow units from and remove again.
+"""Optional synthetic Arena opponents. Not used by the Friend list or helper system.
 
-friends.yaml holds the hand-picked friends. This module adds a crowd around them, so the friend screens,
-the companion list and the "send gifts to N friends" daily quests have people in them:
+When explicitly enabled, this module adds a crowd to Arena rival lists:
 
-  * EXVIUS_PLAYERS (default 200) accounts with gaming/anime handles, ids 910000001 and up, a Rank each;
+    * EXVIUS_PLAYERS (default 0) optional accounts with gaming/anime handles, ids 910000001 and up, a Rank each;
   * each one lends a different unit every week (Sunday rollover, same week as the summon rotation). With
     the historical replay on, only units already released by then are lent (replay.released_by);
-  * Friend > Suggestions shows EXVIUS_PLAYER_SUGGESTIONS (default 10) of them, changing daily; Friend >
-    Search finds any of them by id;
-  * a friend request is accepted at once (no one is on the other end to accept it), and Remove works.
-    Who you have added or removed is kept in your save (player.data["exvius_friends"]).
-  * EXVIUS_START_FRIENDS (default 15) of them are already your friends in a new save, so the gift
-    quests can be done from day one. Remove any you don't want.
 
-Everything is derived from the friend id, the week and the day, so nothing about the crowd is stored
-except your own adds and removals. EXVIUS_PLAYERS=0 turns the crowd off.
+Real registered players are used for friendship and support units.
 """
 from __future__ import annotations
 
@@ -58,16 +50,9 @@ def enabled() -> bool:
 
 def _count() -> int:
     try:
-        return max(0, min(999, int(os.environ.get("EXVIUS_PLAYERS", "200"))))
+        return max(0, min(999, int(os.environ.get("EXVIUS_PLAYERS", "0"))))
     except ValueError:
-        return 200
-
-
-def _int_env(name: str, default: int) -> int:
-    try:
-        return max(0, int(os.environ.get(name, str(default))))
-    except ValueError:
-        return default
+        return 0
 
 
 def names(count: int | None = None) -> list[str]:
@@ -138,7 +123,7 @@ _PLAYERS: dict = {}
 
 
 def player(index: int) -> dict:
-    """Player `index` (1-based) as a friends.yaml-style entry, with this week's unit. Cached per week."""
+    """Player `index` (1-based) as an Arena-only entry, with this week's unit. Cached per week."""
     week = _week()
     key = (index, week)
     if key not in _PLAYERS:
@@ -167,10 +152,6 @@ def _player(index: int, week: int) -> dict:
         return _entry(index, raw)
 
 
-def all_ids() -> list[int]:
-    return [ID_BASE + i for i in range(1, _count() + 1)]
-
-
 def by_id(friend_id) -> dict | None:
     try:
         index = int(friend_id) - ID_BASE
@@ -179,53 +160,3 @@ def by_id(friend_id) -> dict | None:
     if 1 <= index <= _count():
         return player(index)
     return None
-
-
-def _state(player_state) -> dict:
-    return player_state.data.setdefault("exvius_friends", {}) if player_state is not None else {}
-
-
-def friend_ids(player_state) -> list[int]:
-    """The generated players who are your friends: the starting set plus your adds, minus removals."""
-    if not enabled():
-        return []
-    state = _state(player_state)
-    if "players_added" not in state and player_state is not None:
-        start = _int_env("EXVIUS_START_FRIENDS", 15)
-        picks = random.Random("exvius-start-friends").sample(all_ids(), min(start, _count()))
-        state["players_added"] = sorted(picks)
-        player_state.dirty = True
-    added = [int(x) for x in state.get("players_added", [])]
-    return [x for x in added if ID_BASE < x <= ID_BASE + _count()]
-
-
-def suggestions(player_state) -> list[dict]:
-    """Today's suggested players: not already your friends, changing every day."""
-    if not enabled():
-        return []
-    mine = set(friend_ids(player_state))
-    others = [x for x in all_ids() if x not in mine]
-    count = min(_int_env("EXVIUS_PLAYER_SUGGESTIONS", 10), len(others))
-    picks = random.Random("exvius-suggest-" + time.strftime("%Y-%m-%d")).sample(others, count)
-    return [by_id(x) for x in picks]
-
-
-def add(player_state, friend_id) -> bool:
-    if by_id(friend_id) is None or player_state is None:
-        return False
-    current = friend_ids(player_state)
-    if int(friend_id) not in current:
-        _state(player_state)["players_added"] = sorted(current + [int(friend_id)])
-        player_state.dirty = True
-    return True
-
-
-def remove(player_state, friend_id) -> bool:
-    if player_state is None:
-        return False
-    current = friend_ids(player_state)
-    if int(friend_id) in current:
-        _state(player_state)["players_added"] = [x for x in current if x != int(friend_id)]
-        player_state.dirty = True
-        return True
-    return False

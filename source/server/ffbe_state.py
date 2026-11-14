@@ -103,6 +103,7 @@ STATE_MODE = os.environ.get("STATE_MODE", "live")
 STATE_OVERLAY: list = []
 STATE_SETS: list = []
 PROFILE_ID: str | None = None
+PROFILE_MANAGER = None
 
 
 class State:

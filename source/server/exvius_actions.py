@@ -9,7 +9,6 @@ refresh the client's lists carries the unit group, so `apply_to_reply` projects 
 from collections import Counter
 import json
 from exvius_raid_progress import personal_raid_menu
-from ffbe_friends import local_friend_action
 
 from ffbe_state import State, _note
 
@@ -317,14 +316,6 @@ HANDLERS = {
     'cVRHU84e': lambda s, r: inventory_favourite(s, r, 'K8pR0Fvb', ('I3FUD4Mt', 'DWJ3P8cg'), ('aME25KS0', 'Exp2A1u7')),
     'k5v0hMd8': lambda s, r: inventory_favourite(s, r, 'pJ9Eo6cn', ('8UJhyb4u',), ('85HUgcbK',)),
     'VTbX14dD': lambda s, r: inventory_favourite(s, r, '4I71fGzq', ('E0zptv3J',), ('N4ikBXn9',)),
-    "7kG0JAvE": lambda spec, req: local_friend_action(spec, req, 'detail'),
-    "3siZRSU4": lambda spec, req: local_friend_action(spec, req, 'search'),
-    "iAs67PhJ": lambda spec, req: local_friend_action(spec, req, 'suggest'),
-    "1oE3Fwn4": lambda spec, req: local_friend_action(spec, req, 'favorite'),
-    "j0A5vQd8": lambda spec, req: local_friend_action(spec, req, 'request'),   # FriendRequest
-    "kx13SLUY": lambda spec, req: local_friend_action(spec, req, 'agree'),     # FriendAgreeRequest
-    "a2d6omAy": lambda spec, req: local_friend_action(spec, req, 'delete'),    # FriendDeleteRequest
-    "1nbWRV9w": lambda spec, req: local_friend_action(spec, req, 'refuse'),    # FriendRefuseRequest
     "g0BjrU5D": personal_raid_menu,  # RoutineRaidMenuUpdateRequest
     "pB3st6Tg": unit_equip,         # UnitEquipRequest
     "7tWdn9zH": sacrifice,                                             # SacrificeRequest

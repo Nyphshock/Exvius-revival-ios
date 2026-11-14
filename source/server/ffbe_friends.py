@@ -1,16 +1,14 @@
-"""ffbe_friends.py - the hand-curated friend roster: friends.yaml -> the two friend replies.
+"""Serve registered real-player friends and their current party-lead units.
 
-WHY. The party's 6th slot (the client's display word is "Companion") is filled from the friend
-list and the reinforcement list, and both are served EMPTY today - so every battle offers the
-client's own "Depart without companion" (APP-13). The operator wants to hand-curate a few friends
-and their units WITHOUT editing code, so this module reads friends.yaml on every request: save the
-file, and the very next request sees it, no restart, no client relaunch (hot reload).
+Friend relationships are managed by `friend_network.py`; this module serializes accepted friends
+for the native Friend list and Reinforcement replies. The first unit in a friend's active party is
+the borrowed helper.
 
 SHAPE. A support-list row is a UNIT row. It carries the same token set player_state._unit_rows
 emits for the player's own roster, plus the friend-only tokens m3Wghr1j (FriendId), 9qh17ZUf
 (the friend's user name, which in THIS class means the row's own name) and n69quiCJ (emblem).
-The unit's six stats are DERIVED from the shipped tables by player_state.unit_stats, so the YAML
-carries no stat numbers that could drift.
+The unit's six stats are DERIVED from the shipped tables by player_state.unit_stats, so shared
+profile data carries no stat numbers that could drift.
 
 WHERE THE TOKENS COME FROM: docs/notes/companion_support_unit.md (the class reads, the 18
 required tokens of ReinforcementResponse, and the 11 of them the shipped F_GUEST_UNIT_MST row
@@ -23,13 +21,8 @@ from __future__ import annotations
 import os
 import time
 
-import yaml
-
 from player_state import (STAT_TOKENS, TEAM_NEED_EXP, UNIT_KEY, beast_stats, unit_stats,
                           vision_card_mst, limit_burst)
-
-HERE = os.path.dirname(os.path.abspath(__file__))
-FRIENDS_FILE = os.environ.get("FRIENDS_FILE") or os.path.join(HERE, "friends.yaml")
 
 REINFORCE_REPLY = "AJhnI37s"    # GetReinforcementInfoRequest
 FRIENDLIST_REPLY = "u7Id4bMg"   # FriendListRequest
@@ -72,15 +65,12 @@ FRIEND_LIST_DATE_FMT = "%Y-%m-%d %H:%M:%S"
 # rows back off (the empty list is safe by measurement: the layout skips on a zero row count).
 FRIEND_LIST_ENABLED = os.environ.get("FRIENDS_FRIENDLIST", "1") != "0"
 
-_cache: dict = {"mtime": None, "friends": []}
-
-
 def _fail(msg: str):
-    raise ValueError("friends.yaml: " + msg)
+    raise ValueError("friend profile: " + msg)
 
 
 def _entry(index: int, raw: dict) -> dict:
-    """One YAML entry -> a validated dict. Loud: a malformed friend is an error, never a silent skip."""
+    """One public profile -> a validated friend card."""
     if not isinstance(raw, dict):
         _fail("entry #%d is not a mapping" % (index + 1))
     name = str(raw.get("display_name") or "").strip()
@@ -129,60 +119,21 @@ def _entry(index: int, raw: dict) -> dict:
     }
 
 
-def load_friends(path: str | None = None) -> list:
-    """friends.yaml, re-read whenever its mtime changes. A missing file means no friends, not an error."""
-    p = path or FRIENDS_FILE
-    try:
-        mtime = os.path.getmtime(p)
-    except OSError:
-        _cache.update(mtime=None, friends=[])
-        return []
-    if _cache["mtime"] == mtime:
-        return _cache["friends"]
-    with open(p, encoding="utf-8") as fh:
-        doc = yaml.safe_load(fh) or {}
-    if not isinstance(doc, dict):
-        _fail("the file must be a mapping with a friends: list")
-    rows = doc.get("friends") or []
-    if not isinstance(rows, list):
-        _fail("friends: must be a list")
-    friends = [_entry(i, r) for i, r in enumerate(rows)]
-    seen = set()
-    for f in friends:
-        if f["friend_id"] in seen:
-            _fail("friend_id %d appears twice" % f["friend_id"])
-        seen.add(f["friend_id"])
-    _cache.update(mtime=mtime, friends=friends)
-    return friends
-
-
 def all_friends() -> list:
-    """Your friends: friends.yaml's (minus any you removed) and the players you added (friend_players.py)."""
+    """The active player's accepted friends, resolved from registered real profiles."""
     from ffbe_state import State
-    friends = load_friends()
-    player = State.player
-    state = player.data.get('exvius_friends', {}) if player is not None else {}
-    removed = {int(x) for x in state.get('yaml_removed', [])}
-    out = [f for f in friends if f['friend_id'] not in removed]
-    try:
-        import friend_players
-        out += [friend_players.by_id(x) for x in friend_players.friend_ids(player)]
-    except Exception as exc:  # noqa: BLE001 -- the hand-picked friends still work
-        print(f"[friends] generated players skipped ({exc})", flush=True)
-    return [f for f in out if f]
+    if State.player is None:
+        return []
+    import friend_network
+    owner = friend_network.current_id()
+    return [friend for target in friend_network.friend_ids(owner, relation=1)
+            if (friend := friend_network.friend_profile(target)) is not None]
 
 
 def _anyone(friend_id) -> dict | None:
-    """A friend, or any generated player, by id."""
-    target = str(friend_id)
-    for f in load_friends():
-        if str(f['friend_id']) == target:
-            return f
-    try:
-        import friend_players
-        return friend_players.by_id(target)
-    except Exception:  # noqa: BLE001
-        return None
+    """A registered real profile by its friend ID."""
+    import friend_network
+    return friend_network.friend_profile(friend_id)
 
 
 def _reinforce_row(f: dict) -> dict:
@@ -289,133 +240,84 @@ def _friend_list_row(f: dict, now: str) -> dict:
     return row
 
 
-def serve_friends(spec, reply_id=None):
-    """The pipeline step: fill the two friend replies from friends.yaml (no-op for any other reply).
+def _request_list_row(friend_id, category, now):
+    import friend_network
+    friend = friend_network.friend_profile(friend_id)
+    if friend is None:
+        return None
+    row = _friend_list_row(friend, now)
+    row['K3BV17gk'] = str(category)
+    return row
 
-    GATED on the reply id, the apply_carry_edit precedent: when that step was ungated the golden
-    replay caught it growing nine unrelated replies. With no friends.yaml and no rows, both replies
-    keep exactly the shape they had (an empty list), so this step cannot regress the empty case.
-    """
-    friends = all_friends()
-    if not friends:
+
+def serve_friends(spec, reply_id=None):
+    """Project real friends into the native friend-list and reinforcement replies."""
+    if not isinstance(spec, dict):
         return spec
-    if reply_id in BOOT_REPLIES and isinstance(spec, dict):
-        # The Friends menu is available before the first companion request.
-        # Populate its local list during startup as well as on explicit reads.
+    if reply_id in BOOT_REPLIES:
         return serve_friends(spec, FRIENDLIST_REPLY)
+    friends = all_friends()
+    out = dict(spec)
     if reply_id == REINFORCE_REPLY and isinstance(spec, dict):
-        spec[REINFORCE_TAG] = [_reinforce_row(f) for f in friends]
+        out[REINFORCE_TAG] = [_reinforce_row(f) for f in friends]
         # The card list the support screen resolves through. Its own tag, NON-clearing (see VCINFO_TAG).
         cards = [_vc_info_row(f, f["unit"]["vision_card"]) for f in friends if f["unit"]["vision_card"]]
         if cards:
-            spec[VCINFO_TAG] = cards
-        # pzf5se6V is the CLEARING variant - deliberately left alone (it empties the container).
-        group = spec.get(FRIENDINFO_TAG)
-        if isinstance(group, list):
-            group.insert(0, {"0NVFk2fD": DEL_FRIEND_INFO, "H4zD2IQ5": WAIT_NO_WAIT})
+            out[VCINFO_TAG] = cards
         else:
-            spec[FRIENDINFO_TAG] = [{"0NVFk2fD": DEL_FRIEND_INFO, "H4zD2IQ5": WAIT_NO_WAIT}]
-        # Local companions are already accepted friends. Seed that same list
-        # at boot so borrowing one does not offer an online friend invitation.
-        serve_friends(spec, FRIENDLIST_REPLY)
-    elif reply_id == FRIENDLIST_REPLY and isinstance(spec, dict) and FRIEND_LIST_ENABLED:
+            out[VCINFO_TAG] = []
+        # pzf5se6V is the CLEARING variant - deliberately left alone (it empties the container).
+        group = list(out.get(FRIENDINFO_TAG) or [])
+        group.insert(0, {"0NVFk2fD": DEL_FRIEND_INFO, "H4zD2IQ5": WAIT_NO_WAIT})
+        out[FRIENDINFO_TAG] = group
+        return serve_friends(out, FRIENDLIST_REPLY)
+    if reply_id == FRIENDLIST_REPLY:
         now = time.strftime(FRIEND_LIST_DATE_FMT)
-        spec[FRIENDLIST_TAG] = [_friend_list_row(f, now) for f in friends]
+        if FRIEND_LIST_ENABLED:
+            out[FRIENDLIST_TAG] = [_friend_list_row(f, now) for f in friends]
+        else:
+            out[FRIENDLIST_TAG] = []
         from ffbe_state import State
         favorites = (State.player.data.get('exvius_friends', {}).get('favorites', {})
                      if State.player is not None else {})
-        for row in spec[FRIENDLIST_TAG]:
+        for row in out[FRIENDLIST_TAG]:
             row['8zE6w9RP'] = '1' if favorites.get(row['m3Wghr1j']) else '0'
-        # No pending requests: a request to a local player is accepted at once. Suggestions are
-        # today's generated players (FriendUnitInfoResponse kind 5).
-        spec['9Qt5cI0n'] = []
-        spec['hZR64mDe'] = []
-        spec['f6yGgCj2'] = _suggestion_rows()
-    return spec
+        import friend_network
+        owner = friend_network.current_id()
+        out['9Qt5cI0n'] = [row for target in friend_network.friend_ids(owner, relation=3)
+                   if (row := _request_list_row(target, 3, now)) is not None]
+        out['hZR64mDe'] = [row for target in friend_network.friend_ids(owner, relation=2)
+                   if (row := _request_list_row(target, 2, now)) is not None]
+        out['f6yGgCj2'] = _suggestion_rows()
+    return out
 
 
 def _suggestion_rows() -> list:
-    from ffbe_state import State
-    try:
-        import friend_players
-        players = friend_players.suggestions(State.player)
-    except Exception as exc:  # noqa: BLE001
-        print(f"[friends] suggestions skipped ({exc})", flush=True)
-        return []
+    import friend_network
+    owner = friend_network.current_id()
     now = time.strftime(FRIEND_LIST_DATE_FMT)
     rows = []
-    for f in players:
+    for target in friend_network.player_ids():
+        if target == owner or friend_network.relation_type(owner, target) != 0:
+            continue
+        f = friend_network.friend_profile(target)
+        if f is None:
+            continue
         row = _friend_list_row(f, now)
         row['K3BV17gk'] = '5'
         rows.append(row)
     return rows
 
 
-def local_friend_action(spec, request, action):
-    """The friend pages, from the local roster: detail, search, suggestions, favourite, and adding or
-    removing a friend. A request to a local player is accepted at once (nobody else is there)."""
+def sync_friend_count(spec, reply_id):
+    """Keep the player projection's accepted-friend count current on a FriendList refresh."""
     from ffbe_state import State
-    output = {}
-    rows = request.get('I53AVzSo', [])
-    node = rows[0] if isinstance(rows, list) and rows and isinstance(rows[0], dict) else {}
-    target = str(node.get('m3Wghr1j', ''))
-    if action in ('request', 'agree'):
-        friend = _anyone(target)
-        ok = False
-        if friend and State.player is not None and State.player._mutate():
-            if any(str(f['friend_id']) == target for f in load_friends()):
-                state = State.player.data.setdefault('exvius_friends', {})
-                state['yaml_removed'] = [x for x in state.get('yaml_removed', []) if str(x) != target]
-                State.player.dirty = True
-                ok = True
-            else:
-                import friend_players
-                ok = friend_players.add(State.player, target)
-        output['I53AVzSo'] = [{'0NVFk2fD': DEL_FRIEND_INFO, 'H4zD2IQ5': WAIT_NO_WAIT}]
-        if ok and action == 'request':
-            # "Send a friend invite!" (Rookie quests, condition code 14). Counted on the request itself, so
-            # inviting one of the made-up players counts (added 2026-11-06; nothing scored it before).
-            from ffbe_player import score_quest_action
-            score_quest_action('14')
-        if ok:
-            row = _friend_list_row(friend, time.strftime(FRIEND_LIST_DATE_FMT))
-            output['2vuhy0Ex'] = [row]
-        return output
-    if action in ('delete', 'refuse'):
-        if State.player is not None and State.player._mutate():
-            if any(str(f['friend_id']) == target for f in load_friends()):
-                state = State.player.data.setdefault('exvius_friends', {})
-                state['yaml_removed'] = sorted({*map(str, state.get('yaml_removed', [])), target})
-                State.player.dirty = True
-            else:
-                import friend_players
-                friend_players.remove(State.player, target)
-        output['I53AVzSo'] = [{'0NVFk2fD': target, 'H4zD2IQ5': WAIT_NO_WAIT}]
-        return output
-    known = {str(friend['friend_id']): friend for friend in all_friends()}
-    if action == 'search' and target not in known:
-        player = _anyone(target)
-        if player:
-            known[target] = player
-    if action == 'favorite' and target in known and State.player is not None:
-        flag = str(node.get('8zE6w9RP', ''))
-        if flag in ('0', '1') and State.player._mutate():
-            saved = State.player.data.setdefault('exvius_friends', {}).setdefault('favorites', {})
-            saved[target] = flag == '1'
-            State.player.dirty = True
-    if action == 'suggest':
-        output['f6yGgCj2'] = _suggestion_rows()
-        return output
-    result = []
-    if target in known:
-        row = _friend_list_row(known[target], time.strftime(FRIEND_LIST_DATE_FMT))
-        category = '4' if action == 'search' else str(node.get('K3BV17gk', '1'))
-        if category in ('1', '2', '3', '4', '5'):
-            row['K3BV17gk'] = category
-            favorites = State.player.data.get('exvius_friends', {}).get('favorites', {}) if State.player else {}
-            row['8zE6w9RP'] = '1' if favorites.get(target) else '0'
-            result.append(row)
-    # The detail response must retain the requested category and use the
-    # incremental tag. A full accepted list cannot satisfy search-detail type 4.
-    output['2K05IxtX' if action == 'search' else '2vuhy0Ex'] = result
-    return output
+    if reply_id != FRIENDLIST_REPLY or State.player is None or State.player.mode == 'frozen':
+        return spec
+    import friend_network
+    count = len(friend_network.friend_ids(friend_network.current_id(), relation=1))
+    counts = State.player.data.setdefault('counts', {})
+    if int(counts.get('friend', 0)) != count:
+        counts['friend'] = count
+        State.player.dirty = True
+    return spec

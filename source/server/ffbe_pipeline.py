@@ -34,7 +34,7 @@ from ffbe_battle import (apply_battle_bgm, apply_result_drops, apply_result_item
                           mission_end_echo, record_pushed_switches, roll_drops,
                           serve_challenge_clear, serve_challenge_clear_all, serve_version_table)
 from ffbe_banner import MARQUEE_GROUP, serve_home_marquee
-from ffbe_friends import serve_friends
+from ffbe_friends import serve_friends, sync_friend_count
 from ffbe_gacha import serve_gacha, serve_gacha_info
 from ffbe_player import (apply_carry_edit, apply_emblem_setting, apply_party_edit, apply_progress, claim_daily_quest,
                           claim_panel_quest,
@@ -407,14 +407,13 @@ PIPELINE: tuple = (
          if State.player is not None else c.spec,
          "state", "State.player.orbs / State.player.currencies",
          "ShopUseRequest shopId 21 -> fill the family to cap and spend its shipped useDia (100 lapis)"),
-    # THE FRIEND ROSTER (APP-13): the hand-curated `friends.yaml` fills the two friend replies -- the
-    # support/companion list (ReinforcementResponse, the NON-clearing tag) and the friends area
-    # (FriendUnitInfoResponse). The file is re-read on every request, so an edit takes effect on the
-    # next request with no restart; a missing file leaves both replies exactly as they were (empty),
-    # which is what makes this step unable to regress the empty case.
+    # REAL FRIENDS (APP-13): accepted registered profiles fill the support/companion list and friends area.
+    # Profile helpers are resolved from each user's active party; an empty accepted list remains empty.
     Step("serve_friends", lambda c: serve_friends(c.spec, c.reply_id),
          "spec", "9Tp2fiyB / I53AVzSo / 56gJBnVh",
-         "friends.yaml -> the support list + the friends area (hot: re-read per request)"),
+         "registered real profiles -> the support list + the friends area"),
+    Step("sync_friend_count", lambda c: sync_friend_count(c.spec, c.reply_id),
+         "state", "State.player.counts.friend", "refresh the accepted real-friend count on FriendList"),
     # The player groups (roster, equipment, decks, rank/NRG, lapis) are a PROJECTION of the one player
     # state: replace whatever the payload carried. A reply with no user-state group is left untouched.
     # Player actions the recorded corpus never answered (exvius_actions.py); BEFORE the projection, which
@@ -507,6 +506,10 @@ PIPELINE_EDGES: tuple = (
     Edge("serve_survival", "serve_event_gate", "spec / 0xkoNP8U",
          "BOTH append to the same replace-on-read gate list, so the second must see the first's rows -- "
          "either order works only if each builds on what the other left"),
+    Edge("sync_friend_count", "apply_to_reply", "State.player.counts.friend",
+         "the user group reply must project the accepted-friend count refreshed by FriendList"),
+    Edge("sync_friend_count", "save_state", "State.player.counts.friend",
+         "the accepted-friend count is part of the player's saved state"),
     Edge("serve_event_gate", "serve_enhance_unlocks", "spec / 0xkoNP8U",
          "the auto-unlock step reads the gate rows after the event areas have been added"),
     Edge("serve_enhance_unlocks", "save_state", "State.player.exvius_mission_unlock",
