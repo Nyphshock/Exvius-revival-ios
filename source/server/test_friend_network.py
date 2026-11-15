@@ -81,16 +81,23 @@ class FriendNetworkTests(unittest.TestCase):
         self.assertEqual(friend["unit"]["master_id"], "100000102")
 
     def test_public_friend_preserves_equipment_slots(self):
+        import ffbe_friends
+
         profile = _HelperProfile()
         profile.roster_row = lambda _iid: {
             "instance_id": "lead", "master_id": "100000102", "level": 120,
+            "lb_level": 5, "lb_exp": 0, "materia": ["200100001", "200100002", "0", "0"],
             "equipment": {1: "sword", 5: "armor"},
         }
         with patch.object(friend_network, "player_for", return_value=profile), \
-                patch("ffbe_friends._entry", side_effect=lambda _index, raw: raw):
+            patch("ffbe_friends.unit_stats", return_value=(100, 10, 20, 30, 40, 50)), \
+            patch("ffbe_friends.limit_burst", return_value=None):
             friend = friend_network.friend_profile("300000002")
+            reinforcement_row = ffbe_friends._reinforce_row(friend)
 
         self.assertEqual(friend["unit"]["equipment"], ["sword", "0", "0", "0", "armor", "0"])
+        self.assertEqual(friend["unit"]["abilities"], ["200100001", "200100002", "0", "0"])
+        self.assertEqual(reinforcement_row["80NUYFMJ"], "1-200100001@2-200100002@3-0@4-0")
 
     def test_public_friend_uses_companion_settings_by_tab_not_regular_party_lead(self):
         profile = _HelperProfile()

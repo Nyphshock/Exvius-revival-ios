@@ -978,7 +978,7 @@ def _retain_owned_equipment():
     return owned
 
 
-def _wire_loadouts(slot, members, slots=5):
+def _wire_loadouts(slot, members, slots=5, ignore_unknown=False):
     """Decode the original save-slot strings, including both unit forms."""
     loadouts = {}
     for token, fields, size in [('93Y6evuT', ('equipment', 'shift_equipment'), 6),
@@ -986,6 +986,8 @@ def _wire_loadouts(slot, members, slots=5):
         for entry in filter(None, str(slot.get(token) or '').split(',')):
             iid, raw = entry.split(':', 1)
             if iid not in members:
+                if ignore_unknown:
+                    continue
                 raise ValueError('saved loadout unit is not in party')
             forms = raw.split('|')
             if len(forms) > 2:
@@ -1003,12 +1005,16 @@ def _wire_loadouts(slot, members, slots=5):
     for token, field in [('w1JG7i9j', 'brave_shift'), ('2c8nqLrM', 'skin_id')]:
         for entry in filter(None, str(slot.get(token) or '').split(',')):
             iid, value = entry.split(':', 1)
+            if iid not in members and ignore_unknown:
+                continue
             if iid not in members or not value.isdigit():
                 raise ValueError('invalid saved unit property')
             loadouts.setdefault(iid, {})[field] = int(value)
     for entry in filter(None, str(slot.get('nQ1iAGf3') or '').split(',')):
         iid, raw = entry.split(':', 1)
         forms = raw.split('|')
+        if iid not in members and ignore_unknown:
+            continue
         if iid not in members or len(forms) > 2 or any(not re.fullmatch(r'[0-9-]+', v) for v in forms):
             raise ValueError('invalid saved vision card')
         for field, card in zip(('vision_card', 'shift_vision_card'), forms):

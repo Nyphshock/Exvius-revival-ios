@@ -138,7 +138,7 @@ def unit_equip(spec, req):
     loadouts = {}
     try:
         for row in rows:
-            decoded, _ = _wire_loadouts(row, roster)
+            decoded, _ = _wire_loadouts(row, roster, ignore_unknown=True)
             for iid, fields in decoded.items():
                 for field, values in fields.items():
                     if field in ("equipment", "shift_equipment", "materia", "shift_materia"):

@@ -3194,6 +3194,7 @@ class PlayerState:
         Token map (`readParam` `0x19244c4`, 2 tokens): `J1YX9kmM` = itemId, `Qy5EvcK1` = itemNum (>= 1; a
         zero would be read as a delete).
         """
+        equip_items = _load_ndjson('F_EQUIP_ITEM_MST.ndjson', 'J1YX9kmM')
         counts: dict[str, int] = {}
         order: list[str] = []
         for u in self.data["roster"]:
@@ -3201,14 +3202,14 @@ class PlayerState:
             shifted = Counter(str(i) for i in (u.get('shift_equipment') or {}).values())
             for iid, quantity in (normal | shifted).items():
                 iid = str(iid)
-                if iid and iid != "0":
+                if iid and iid != "0" and iid in equip_items:
                     if iid not in counts:
                         order.append(iid)
                         counts[iid] = 0
                     counts[iid] += quantity
         for it in self.data.get("inventory", {}).get("equipment", []):
             iid = str(it.get("item_id", ""))
-            if iid and int(it.get("count", 0) or 0) > 0:
+            if iid and iid in equip_items and int(it.get("count", 0) or 0) > 0:
                 if iid not in counts:
                     order.append(iid)
                     counts[iid] = 0
@@ -3690,7 +3691,8 @@ class PlayerState:
                 # `items` is owned-but-invisible -- exactly the blank-frame failure
                 # `docs/notes/unit_equip_display.md` describes. Found by the panel-quest claim: quest
                 # 1000101 pays `21:403046900:1` and it was landing in the wrong bucket.
-                self.grant_equipment(iid, count)
+                if not self.grant_equipment(iid, count):
+                    continue
             elif str(kind) == "10":
                 # A UNIT. It belongs in the ROSTER, which is what `UserUnitInfoResponse` (`B71MekS8`) is
                 # built from; nothing reads an `item_type` 10 row out of the bag. `granted_rarity` is left
@@ -3779,7 +3781,8 @@ class PlayerState:
 
     def grant_equipment(self, equip_id, count: int = 1) -> int:
         """Own `count` copies of an equipment id in `inventory.equipment` (the client's owned-equip list)."""
-        if not self._mutate():
+        if (not self._mutate() or
+                str(equip_id) not in _load_ndjson('F_EQUIP_ITEM_MST.ndjson', 'J1YX9kmM')):
             return 0
         # Legacy saves can represent worn copies only on the roster. Start
         # from the projected total so a new reward adds an actual extra copy.
@@ -3881,8 +3884,10 @@ class PlayerState:
                             int(row.get("count", 0) or 0))
         if count <= 0:
             return False
-        if kind in STORAGE_CURRENCY or str(kind) == "21":
+        if kind in STORAGE_CURRENCY:
             return True
+        if str(kind) == "21":
+            return str(iid) in _load_ndjson('F_EQUIP_ITEM_MST.ndjson', 'J1YX9kmM')
         if str(kind) == "10":
             return unit_mst(iid) is not None
         if str(kind) == '22':

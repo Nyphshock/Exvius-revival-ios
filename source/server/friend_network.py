@@ -92,7 +92,9 @@ def friend_profile(player_id, support_tab=1):
                 "lb_level": unit.get("lb_level", 0),
                 "lb_exp": unit.get("lb_exp", 0),
                 "vision_card": unit.get("vision_card", ""),
-                "abilities": unit.get("abilities") or [],
+                # PlayerState stores equipped abilities as materia; keep the older public-profile key
+                # as a fallback for profiles created before the roster-backed helper projection.
+                "abilities": unit.get("materia") or unit.get("abilities") or [],
                 "equipment": equipment,
             },
         })
