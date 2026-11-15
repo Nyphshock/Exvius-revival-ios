@@ -1087,10 +1087,9 @@ SURVIVAL_COND_CARRIERS = ("lEHBdOEf", "6H1R9WID")
 # area/dungeon/first-mission are DERIVED from the shipped tables (naming an area is enough, which is the
 # point: `_event_area_facts` reads them, nobody types them); the window, the tab, the art and the currency
 # are AUTHORED. Env: `EVENT_GATE_AREAS=970,9935` (empty = off), optional `EVENT_GATE_TAB` override.
-# The default is the vortex Event tab as it stands: 970 (Fundamental Forces) and 888 (Edel the Mole,
-# area-name text EN via F_TEXT_AREA_NAME) -- one word per event, and the tile's dungeon + first mission are
-# derived per area, so a new event is one more word here.
-EVENT_GATE_AREAS = tuple(x for x in (os.environ.get("EVENT_GATE_AREAS") or "970,888,734").split(",") if x)
+# The defaults include the current story-event tiles and Chamber of Crystals (217), a launch-era permanent
+# Enhance area. One word per event; the tile's dungeon + first mission are derived per area.
+EVENT_GATE_AREAS = tuple(x for x in (os.environ.get("EVENT_GATE_AREAS") or "970,888,734,217").split(",") if x)
 EVENT_GATE_TAB = os.environ.get("EVENT_GATE_TAB") or None  # `qnUhs32P`, optional 1-BASED tab override
 EVENT_GATE_KIND = os.environ.get("EVENT_GATE_KIND", "1")   # `Z0EN6jSh` -- the +0x100 1/2 selector
 # The art. MEASURED 2026-10-12, after the operator reported the tile wearing area 226's banner: the tile

@@ -100,6 +100,12 @@ class ArchiveReplayTests(unittest.TestCase):
         self.assertEqual([row["area"] for row in event_archive.filter_events_by_story(rows, player)],
                          ["218", "219", "1038"])
 
+    def test_chamber_of_crystals_is_a_default_enhance_gate(self):
+        from ffbe_config import EVENT_GATE_AREAS
+
+        self.assertIn("217", EVENT_GATE_AREAS)
+        self.assertEqual(event_archive.vortex_tab(event_archive.event_name("217")), "2")
+
     def test_chamber_of_awakening_five_star_is_hidden_until_first_checkpoint_clear(self):
         player = SimpleNamespace(data={"progress": {"cleared_missions": []}})
         row = {"area": "225", "name": "Chamber of Awakening", "group": "permanent",
