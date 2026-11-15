@@ -149,8 +149,7 @@ def unit_equip(spec, req):
                     if field in ("vision_card", "shift_vision_card") and values and values not in cards:
                         # _wire_loadouts reduces the phone's "0-<user_vc_id>" to the user_vc_id.
                         raise ValueError("unowned vision card")
-                if str(row.get("xBi3L6yR", "1")) == "1":
-                    loadouts.setdefault(iid, {}).update(fields)
+                loadouts.setdefault(iid, {}).update(fields)
     except (AttributeError, TypeError, ValueError):
         _note("unit-equip: invalid equipment update")
         return _refresh(spec)

@@ -46,8 +46,9 @@ class EquipmentInventoryTests(unittest.TestCase):
             "party": {"active_deck": 0, "decks": []},
         })
         request = {"Er92Kdhm": [{
-            "93Y6evuT": "stale-unit:1-0,unit-1:1-403040200",
-            "80NUYFMJ": "stale-unit:1-0,unit-1:1-200100001",
+            "xBi3L6yR": "7",
+            "93Y6evuT": "stale-unit:1-0;unit-1:1-403040200",
+            "80NUYFMJ": "stale-unit:1-0;unit-1:1-200100001",
         }]}
 
         with patch.object(ffbe_state.State, "player", player), \

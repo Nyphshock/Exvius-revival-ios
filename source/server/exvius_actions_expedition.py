@@ -978,12 +978,16 @@ def _retain_owned_equipment():
     return owned
 
 
+def _wire_entries(value):
+    return filter(None, re.split(r'[;,]', str(value or '')))
+
+
 def _wire_loadouts(slot, members, slots=5, ignore_unknown=False):
     """Decode the original save-slot strings, including both unit forms."""
     loadouts = {}
     for token, fields, size in [('93Y6evuT', ('equipment', 'shift_equipment'), 6),
                                 ('80NUYFMJ', ('materia', 'shift_materia'), 4)]:
-        for entry in filter(None, str(slot.get(token) or '').split(',')):
+        for entry in _wire_entries(slot.get(token)):
             iid, raw = entry.split(':', 1)
             if iid not in members:
                 if ignore_unknown:
@@ -1003,14 +1007,14 @@ def _wire_loadouts(slot, members, slots=5, ignore_unknown=False):
                     values[position] = item
                 loadouts.setdefault(iid, {})[field] = values if size == 6 else list(values.values())
     for token, field in [('w1JG7i9j', 'brave_shift'), ('2c8nqLrM', 'skin_id')]:
-        for entry in filter(None, str(slot.get(token) or '').split(',')):
+        for entry in _wire_entries(slot.get(token)):
             iid, value = entry.split(':', 1)
             if iid not in members and ignore_unknown:
                 continue
             if iid not in members or not value.isdigit():
                 raise ValueError('invalid saved unit property')
             loadouts.setdefault(iid, {})[field] = int(value)
-    for entry in filter(None, str(slot.get('nQ1iAGf3') or '').split(',')):
+    for entry in _wire_entries(slot.get('nQ1iAGf3')):
         iid, raw = entry.split(':', 1)
         forms = raw.split('|')
         if iid not in members and ignore_unknown:
@@ -1021,7 +1025,7 @@ def _wire_loadouts(slot, members, slots=5, ignore_unknown=False):
             # Store the owned card's user_vc_id; the wire carries it as "0-<id>" ("0-0" = none).
             loadouts.setdefault(iid, {})[field] = vision_card_key(card)
     espers = [0] * slots
-    for entry in filter(None, str(slot.get('XZ4Kh7Ic') or '').split(',')):
+    for entry in _wire_entries(slot.get('XZ4Kh7Ic')):
         position, value = entry.split(':', 1)
         if not position.isdigit() or not 0 <= int(position) < slots or not value.isdigit():
             raise ValueError('invalid saved esper')
