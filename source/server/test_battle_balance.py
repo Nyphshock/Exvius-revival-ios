@@ -89,6 +89,55 @@ class TrialBalanceTests(unittest.TestCase):
             self.assertEqual(updated['T8xMDAZ4'], '45')
         self.assertEqual(original_parts[0]['fh31sk7B'], '1500')
 
+    def test_farplane_temple_boss_stats_scale_only_in_their_story_battles(self):
+        bosses = {
+            '2000101': '407001000',
+            '2000102': '301003000',
+            '2000103': '307001000',
+            '2000201': '408011000',
+        }
+        for mission, monster in bosses.items():
+            part = {'xqartN26': monster, '6Yc4RkdM': '1', 'fh31sk7B': '1000',
+                    '9NBV1XCS': '300', 'Pn5w9dfh': '25', '84FJM3PD': '250', 'T8xMDAZ4': '30'}
+            bundle = {'bV34YIJQ': [part]}
+
+            with self.subTest(mission=mission, monster=monster):
+                balanced = rebalance_trial_bosses(mission, bundle)
+                self.assertEqual(
+                    {key: balanced['bV34YIJQ'][0][key]
+                     for key in ('fh31sk7B', '9NBV1XCS', 'Pn5w9dfh', '84FJM3PD', 'T8xMDAZ4')},
+                    {'fh31sk7B': '65000', '9NBV1XCS': '360', 'Pn5w9dfh': '40',
+                     '84FJM3PD': '300', 'T8xMDAZ4': '45'},
+                )
+                self.assertEqual(part['fh31sk7B'], '1000')
+
+        untouched = {'bV34YIJQ': [{'xqartN26': '407001000', 'fh31sk7B': '1000'}]}
+        self.assertIs(rebalance_trial_bosses('2000102', untouched), untouched)
+
+    def test_story_esper_quest_scales_every_monster_part(self):
+        from unittest.mock import patch
+
+        def esper_for_mission(mission, rarity=1):
+            return 1 if mission == '1110404' and rarity == 1 else None
+
+        parts = [
+            {'xqartN26': 'esper-boss', 'fh31sk7B': '1000', '9NBV1XCS': '300',
+             'Pn5w9dfh': '25', '84FJM3PD': '250', 'T8xMDAZ4': '30'},
+            {'xqartN26': 'support-enemy', 'fh31sk7B': '200', '9NBV1XCS': '100',
+             'Pn5w9dfh': '10', '84FJM3PD': '80', 'T8xMDAZ4': '20'},
+        ]
+        bundle = {'bV34YIJQ': parts}
+
+        with patch('player_state.story_beast_for_mission', side_effect=esper_for_mission):
+            balanced = rebalance_trial_bosses('1110404', bundle)
+
+        self.assertEqual([part['fh31sk7B'] for part in balanced['bV34YIJQ']], ['65000', '13000'])
+        self.assertEqual([part['9NBV1XCS'] for part in balanced['bV34YIJQ']], ['360', '120'])
+        self.assertEqual([part['Pn5w9dfh'] for part in balanced['bV34YIJQ']], ['40', '16'])
+        self.assertEqual([part['84FJM3PD'] for part in balanced['bV34YIJQ']], ['300', '96'])
+        self.assertEqual([part['T8xMDAZ4'] for part in balanced['bV34YIJQ']], ['45', '30'])
+        self.assertEqual(parts[0]['fh31sk7B'], '1000')
+
     def test_other_missions_keep_the_original_bundle(self):
         bundle = {'bV34YIJQ': [{'xqartN26': '401011000', 'fh31sk7B': '230000'}]}
 

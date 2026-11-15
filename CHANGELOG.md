@@ -2,6 +2,15 @@
 
 Each entry is one update to this repo. To update: in your repo folder run `git pull`, then from `ios-server` run `docker compose build && docker compose up -d`. Your save isn't touched. Open the game twice afterwards so it picks up the new data.
 
+## 2026-11-16: Trial progression, friend espers and boss tuning
+
+- Added Global release dates for 19 New Trial missions, so each becomes available at its historical trial checkpoint.
+- Banners 9100016 (Gilgamesh, Bartz, Exdeath, Faris), 9100017 (Snow, Vanille, Sazh) and 9100018 (Lightning, Fang, Hope) now unlock after the first checkpoint; their original Global dates remain unchanged for the summon replay.
+- Chamber of Crystals is included in the default Enhance Vortex gates and is dated from Global launch, so the first checkpoint does not hide it.
+- Friend support units now show the esper linked to the selected Companion slot, with its rarity and level.
+- White Dragon, Demon Chimera, Brachiosaur and Erinyes in the Farplane Temple story battles now use the established trial scaling: HP x65, ATK/MAG x1.2, DEF x1.6 and SPR x1.5.
+- Every enemy in story quests that grant or awaken an esper now uses the same trial stat scaling. White Dragon, Demon Chimera and Brachiosaur are available from the beginning; Erinyes unlocks on 2017-09-07. Other Esper quests retain their checkpoint restrictions.
+
 ## 2026-11-14: Vortex unit drops credited
 ## 2026-11-15: Trial boss stat tuning
 

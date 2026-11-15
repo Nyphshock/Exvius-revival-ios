@@ -57,6 +57,48 @@ class ArchiveReplayTests(unittest.TestCase):
         august_2022 = event_archive.filter_events_by_story(rows, player_before(date(2022, 8, 18)))
         self.assertEqual([row["area"] for row in august_2022], ["909", "1041", "1096"])
 
+    def test_late_2016_banner_exceptions_unlock_after_the_first_checkpoint(self):
+        banners = [
+            {"id": "9100016", "name": "Gilgamesh, Bartz, Exdeath, Faris Featured Summon",
+             "community": {"release": "2016-11-25"}},
+            {"id": "9100017", "name": "Snow, Vanille, Sazh Featured Summon",
+             "community": {"release": "2016-12-02"}},
+            {"id": "9100018", "name": "Lightning, Fang, Hope Featured Summon",
+             "community": {"release": "2016-12-09"}},
+        ]
+        before_first = SimpleNamespace(data={"progress": {"cleared_missions": []}})
+        after_first = SimpleNamespace(data={"progress": {"cleared_missions": ["8991101"]}})
+        before_ids = {str(banner["id"]) for banner in
+                      gacha_archive.filter_banners_for_story(before_first, banners)}
+        after_ids = {str(banner["id"]) for banner in
+                     gacha_archive.filter_banners_for_story(after_first, banners)}
+
+        for banner in banners:
+            with self.subTest(banner=banner["id"]):
+                self.assertNotIn(banner["id"], before_ids)
+                self.assertIn(banner["id"], after_ids)
+                self.assertEqual(gacha_archive._released(banner).isoformat(),
+                                 banner["community"]["release"])
+
+    def test_farplane_temple_esper_quests_use_their_global_release_dates(self):
+        def player_before(checkpoint_day):
+            cleared = [mission for checkpoint, missions in CHECKPOINTS if checkpoint < checkpoint_day
+                       for mission in missions]
+            return SimpleNamespace(data={"progress": {"cleared_missions": cleared}})
+
+        first_missions = ("2000101", "2000102", "2000103")
+        erinyes_before_release = player_before(date(2017, 8, 17))
+        erinyes_after_release = player_before(date(2017, 9, 29))
+
+        with patch("player_state.is_main_story_mission", return_value=True), \
+                patch("trial_progression.story_mission_is_available", return_value=False):
+            for mission in first_missions:
+                with self.subTest(mission=mission):
+                    self.assertTrue(event_archive.mission_is_available(
+                        SimpleNamespace(data={"progress": {"cleared_missions": []}}), mission))
+            self.assertFalse(event_archive.mission_is_available(erinyes_before_release, "2000201"))
+            self.assertTrue(event_archive.mission_is_available(erinyes_after_release, "2000201"))
+
     def test_series_boss_quests_unlock_on_individual_release_dates(self):
         cleared = [mission for checkpoint, missions in CHECKPOINTS if checkpoint < date(2019, 9, 12)
                    for mission in missions]
@@ -80,6 +122,34 @@ class ArchiveReplayTests(unittest.TestCase):
         self.assertTrue(event_archive.mission_is_available(player, "9091118"))
         self.assertFalse(event_archive.mission_is_available(player, "99460101"))
         self.assertFalse(event_archive.mission_is_available(player, "99580101"))
+
+    def test_new_trials_are_limited_by_their_global_release_dates(self):
+        releases = {
+            "1110406": "2018-03-29", "1115007": "2018-03-29",
+            "1125206": "2018-05-24", "1135507": "2018-05-24",
+            "1125107": "2018-06-28", "1325107": "2018-06-28",
+            "1515007": "2018-07-27", "1625107": "2018-07-27",
+            "1230107": "2018-08-30", "1815107": "2018-08-30",
+            "11215107": "2018-09-27", "1425107": "2018-10-25",
+            "11425107": "2018-10-25", "11315103": "2018-11-29",
+            "11515107": "2019-01-24", "11515207": "2019-09-26",
+            "1920803": "2021-04-15", "11720703": "2020-08-27",
+            "1715107": "2021-01-28",
+        }
+
+        def player_before(checkpoint_day):
+            cleared = [mission for checkpoint, missions in CHECKPOINTS if checkpoint < checkpoint_day
+                       for mission in missions]
+            return SimpleNamespace(data={"progress": {"cleared_missions": cleared}})
+
+        for mission, release in releases.items():
+            released = date.fromisoformat(release)
+            previous = max(checkpoint for checkpoint, _missions in CHECKPOINTS if checkpoint <= released)
+            following = min(checkpoint for checkpoint, _missions in CHECKPOINTS if checkpoint > released)
+            with self.subTest(mission=mission, release=release):
+                self.assertEqual(event_archive.quest_dates()["missions"].get(mission), release)
+                self.assertFalse(event_archive.mission_is_available(player_before(previous), mission))
+                self.assertTrue(event_archive.mission_is_available(player_before(following), mission))
 
     def test_unknown_dated_event_fails_closed_but_permanent_content_remains(self):
         player = SimpleNamespace(data={"progress": {"cleared_missions": []}})

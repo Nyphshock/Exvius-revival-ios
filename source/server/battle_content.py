@@ -1033,8 +1033,22 @@ def event_binding(mission: str) -> dict | None:
 
 def rebalance_trial_bosses(mission: int | str, bundle: dict) -> dict:
     mission = str(mission)
-    if mission not in ('8991101', '8991102', '8991103'):
-        return bundle
+    farplane_temple_bosses = {
+        '2000101': '407001000',  # White Dragon
+        '2000102': '301003000',  # Demon Chimera
+        '2000103': '307001000',  # Brachiosaur
+        '2000201': '408011000',  # Erinyes
+    }
+    story_esper_mission = False
+    if mission not in ('8991101', '8991102', '8991103', *farplane_temple_bosses):
+        try:
+            from player_state import story_beast_for_mission
+            story_esper_mission = any(story_beast_for_mission(mission, rarity) is not None
+                                      for rarity in (1, 2, 3))
+        except OSError:
+            return bundle
+        if not story_esper_mission:
+            return bundle
     parts = bundle.get('bV34YIJQ')
     if not isinstance(parts, list):
         return bundle
@@ -1068,6 +1082,16 @@ def rebalance_trial_bosses(mission: int | str, bundle: dict) -> dict:
         elif mission == '8991102':
             balanced_part = dict(part)
             for token, percent in surging_menace_stat_multipliers.items():
+                balanced_part[token] = str(int(part.get(token) or 0) * percent // 100)
+            balanced_parts.append(balanced_part)
+        elif part.get('xqartN26') == farplane_temple_bosses.get(mission):
+            balanced_part = dict(part)
+            for token, percent in antenolla_stat_multipliers.items():
+                balanced_part[token] = str(int(part.get(token) or 0) * percent // 100)
+            balanced_parts.append(balanced_part)
+        elif story_esper_mission:
+            balanced_part = dict(part)
+            for token, percent in antenolla_stat_multipliers.items():
                 balanced_part[token] = str(int(part.get(token) or 0) * percent // 100)
             balanced_parts.append(balanced_part)
         else:

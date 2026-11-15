@@ -137,6 +137,40 @@ class FriendNetworkTests(unittest.TestCase):
         self.assertEqual(favorite["unit_instance_id"], "vivi")
         self.assertEqual(nemesis_2["support_tab"], 5)
 
+    def test_public_friend_includes_esper_linked_to_companion_slot(self):
+        import ffbe_friends
+
+        profile = _HelperProfile()
+        profile.data = {
+            "identity": {"user_id": "300000002", "handle_name": "Player Two"},
+            "rank": {"level": 42}, "profile": {"player_emblem_id": 0},
+            "beasts": [{"esper_id": "12", "rarity": 4, "level": 55}],
+            "party": {"special": {"7": {
+                "active_deck": 0,
+                "decks": [{"id": 0, "members": [
+                    {"disp_order": 0, "instance_id": "favorite"},
+                    {"disp_order": 1, "instance_id": "event1"},
+                ]}],
+                "beast_decks": {"0": [99, 12, 0, 0, 0, 0]},
+            }}},
+        }
+        profile.roster_row = lambda instance_id: {
+            "instance_id": instance_id, "master_id": "100000102", "level": 120,
+            "lb_level": 5, "equipment": {},
+        }
+
+        with patch.object(friend_network, "player_for", return_value=profile), \
+                patch("ffbe_friends.unit_stats", return_value=(100, 10, 20, 30, 40, 50)), \
+                patch("ffbe_friends.limit_burst", return_value=None), \
+                patch("ffbe_friends.beast_stats", return_value=(11, 12, 13, 14, 15, 16)):
+            friend = friend_network.friend_profile("300000002", support_tab=2)
+            row = ffbe_friends._reinforce_row(friend)
+
+        self.assertEqual(friend["unit"]["esper"], 12)
+        self.assertEqual(friend["unit"]["esper_rarity"], 4)
+        self.assertEqual(friend["unit"]["esper_level"], 55)
+        self.assertEqual(row["XZ4Kh7Ic"], "12,4,55,11,12,13,14,15,16")
+
     def test_public_profile_validation_preserves_requested_support_tab(self):
         profile = _HelperProfile()
         profile.data["party"] = {"special": {"7": {"active_deck": 0, "decks": [{"id": 0, "members": [

@@ -53,6 +53,12 @@ MISSION_RELEASE_OVERRIDES = {
     '9091116': '2021-09-23',                            # The Rursan Arbiter
     '9091118': '2021-10-14', '99460101': '2023-09-28',  # Safer-Sephiroth / EXT
 }
+MISSION_STORY_RELEASE_OVERRIDES = {
+    '2000101': '0001-01-01',  # White Dragon: available from the beginning
+    '2000102': '0001-01-01',  # Demon Chimera: available from the beginning
+    '2000103': '0001-01-01',  # Brachiosaur: available from the beginning
+    '2000201': '2017-09-07',  # Erinyes: first Global release
+}
 
 
 def history():
@@ -163,6 +169,9 @@ def mission_is_available(player, mission):
     from trial_progression import checkpoint_mission_is_available
     if not checkpoint_mission_is_available(player, mission):
         return False
+    story_release = MISSION_STORY_RELEASE_OVERRIDES.get(mission)
+    if story_release is not None:
+        return release_is_available(player, story_release)
     try:
         from player_state import is_main_story_mission
         is_story = is_main_story_mission(mission)

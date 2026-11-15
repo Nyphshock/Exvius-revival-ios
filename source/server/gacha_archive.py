@@ -21,6 +21,11 @@ REMOVED_SUMMON_NAMES = frozenset({
     'Rare Summon', 'Premium 10+1 Summon', '5★ Guaranteed 10+1 Summon',
     '5+1 Ticket Summon', 'EXVIUS Summon', 'NV EXVIUS Summon',
 })
+# These three Global banners are shown once the player clears the first trial checkpoint. Their original
+# `community.release` dates remain unchanged for the historical summon rotation.
+BANNER_STORY_RELEASE_OVERRIDES = {
+    '9100016': '2016-08-25', '9100017': '2016-08-25', '9100018': '2016-08-25',
+}
 # Original GL9 tab of each GachaMst type code: GachaTopScene::setListLayout
 # (0x2120554) files a banner by GachaMst::isPayType / isFreeType (0, 6, 900) /
 # isLimitedType (50, 7).
@@ -259,7 +264,8 @@ def _banner_unlocked(banner, families, player=None):
         return True
     if player is None:
         return True
-    released = _released(banner)
+    progression_release = BANNER_STORY_RELEASE_OVERRIDES.get(str(banner.get('id') or ''))
+    released = date.fromisoformat(progression_release) if progression_release else _released(banner)
     if released:
         from trial_progression import release_is_available
         return release_is_available(player, released)

@@ -58,7 +58,7 @@ def friend_profile(player_id, support_tab=1):
     party = player.data.get('party') or {}
     special = (party.get('special') or {}).get('7') or {}
     decks = special.get('decks') or []
-    active_deck = str(special.get('active_deck', '0'))
+    active_deck = str(special.get('active_deck', party.get('active_deck', '0')))
     deck = next((row for row in decks if str(row.get('id')) == active_deck), None)
     members = deck.get('members') or [] if deck else []
     member = next((row for row in members
@@ -74,9 +74,33 @@ def friend_profile(player_id, support_tab=1):
     unit = player.roster_row(helper_id) if helper_id else None
     if unit is None:
         return None
+    beast_decks = special.get('beast_decks')
+    if not isinstance(beast_decks, dict) or active_deck not in beast_decks:
+        beast_decks = player.data.get('beast_decks') or {}
+    beast_slots = beast_decks.get(active_deck) or []
+    try:
+        esper_id = str(int(beast_slots[support_tab - 1] or 0))
+    except (IndexError, TypeError, ValueError):
+        esper_id = '0'
+    esper = next((beast for beast in player.data.get('beasts') or []
+                  if str(beast.get('esper_id')) == esper_id), None)
     equipment = unit.get("equipment") or {}
     if isinstance(equipment, dict):
         equipment = [str(equipment.get(str(slot), equipment.get(slot, "0"))) for slot in range(1, 7)]
+    unit_profile = {
+        "master_id": unit.get("master_id"),
+        "level": unit.get("level", 1),
+        "lb_level": unit.get("lb_level", 0),
+        "lb_exp": unit.get("lb_exp", 0),
+        "vision_card": unit.get("vision_card", ""),
+        # PlayerState stores equipped abilities as materia; keep the older public-profile key
+        # as a fallback for profiles created before the roster-backed helper projection.
+        "abilities": unit.get("materia") or unit.get("abilities") or [],
+        "equipment": equipment,
+    }
+    if esper:
+        unit_profile.update(esper=esper_id, esper_rarity=esper.get('rarity', 3),
+                            esper_level=esper.get('level', 60))
     from ffbe_friends import _entry
     try:
         return _entry(0, {
@@ -86,17 +110,7 @@ def friend_profile(player_id, support_tab=1):
             "emblem_id": (player.data.get("profile") or {}).get("player_emblem_id", 0),
             "unit_instance_id": helper_id,
             "support_tab": support_tab,
-            "unit": {
-                "master_id": unit.get("master_id"),
-                "level": unit.get("level", 1),
-                "lb_level": unit.get("lb_level", 0),
-                "lb_exp": unit.get("lb_exp", 0),
-                "vision_card": unit.get("vision_card", ""),
-                # PlayerState stores equipped abilities as materia; keep the older public-profile key
-                # as a fallback for profiles created before the roster-backed helper projection.
-                "abilities": unit.get("materia") or unit.get("abilities") or [],
-                "equipment": equipment,
-            },
+            "unit": unit_profile,
         })
     except (TypeError, ValueError) as exc:
         print(f"[friends] player {player_id} helper unavailable ({exc})", flush=True)
