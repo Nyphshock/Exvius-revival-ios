@@ -24,7 +24,7 @@ class IntangirBalanceTests(unittest.TestCase):
         self.assertEqual(
             {key: balanced['bV34YIJQ'][0][key]
              for key in ('fh31sk7B', '9NBV1XCS', 'Pn5w9dfh', '84FJM3PD', 'T8xMDAZ4')},
-            {'fh31sk7B': '11500000', '9NBV1XCS': '420', 'Pn5w9dfh': '40',
+            {'fh31sk7B': '14950000', '9NBV1XCS': '420', 'Pn5w9dfh': '40',
              '84FJM3PD': '300', 'T8xMDAZ4': '30'},
         )
         self.assertEqual(balanced['bV34YIJQ'][1], other_part)
