@@ -106,6 +106,14 @@ class ArchiveReplayTests(unittest.TestCase):
         self.assertIn("217", EVENT_GATE_AREAS)
         self.assertEqual(event_archive.vortex_tab(event_archive.event_name("217")), "2")
 
+    def test_chamber_of_crystals_is_available_before_first_checkpoint(self):
+        player = SimpleNamespace(data={"progress": {"cleared_missions": []}})
+        row = next(row for row in event_archive.events() if str(row["area"]) == "217")
+
+        visible = event_archive.filter_events_by_story([row], player)
+
+        self.assertEqual([item["area"] for item in visible], ["217"])
+
     def test_chamber_of_awakening_five_star_is_hidden_until_first_checkpoint_clear(self):
         player = SimpleNamespace(data={"progress": {"cleared_missions": []}})
         row = {"area": "225", "name": "Chamber of Awakening", "group": "permanent",
