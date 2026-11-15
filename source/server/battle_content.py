@@ -1031,25 +1031,47 @@ def event_binding(mission: str) -> dict | None:
     return _EVENT_BINDINGS.get(str(mission))
 
 
-def rebalance_intangir_trial(mission: int | str, bundle: dict) -> dict:
-    if str(mission) != '8991101':
+def rebalance_trial_bosses(mission: int | str, bundle: dict) -> dict:
+    mission = str(mission)
+    if mission not in ('8991101', '8991102', '8991103'):
         return bundle
     parts = bundle.get('bV34YIJQ')
     if not isinstance(parts, list):
         return bundle
-    stat_overrides = {
+    intangir_stats = {
         'fh31sk7B': '14950000',
         '9NBV1XCS': '420',
         'Pn5w9dfh': '40',
         '84FJM3PD': '300',
         'T8xMDAZ4': '30',
     }
-    balanced_parts = [
-        dict(part, **stat_overrides)
-        if part.get('xqartN26') == '401011000' and part.get('6Yc4RkdM') == '1'
-        else part
-        for part in parts
-    ]
+    antenolla_stat_multipliers = {
+        'fh31sk7B': 6500,
+        '9NBV1XCS': 120,
+        'Pn5w9dfh': 160,
+        '84FJM3PD': 120,
+        'T8xMDAZ4': 150,
+    }
+    surging_menace_stat_multipliers = {
+        'fh31sk7B': 6500,
+        **antenolla_stat_multipliers,
+    }
+    balanced_parts = []
+    for part in parts:
+        if mission == '8991101' and part.get('xqartN26') == '401011000' and part.get('6Yc4RkdM') == '1':
+            balanced_parts.append(dict(part, **intangir_stats))
+        elif mission == '8991103' and part.get('xqartN26') == '411001000':
+            balanced_part = dict(part)
+            for token, percent in antenolla_stat_multipliers.items():
+                balanced_part[token] = str(int(part.get(token) or 0) * percent // 100)
+            balanced_parts.append(balanced_part)
+        elif mission == '8991102':
+            balanced_part = dict(part)
+            for token, percent in surging_menace_stat_multipliers.items():
+                balanced_part[token] = str(int(part.get(token) or 0) * percent // 100)
+            balanced_parts.append(balanced_part)
+        else:
+            balanced_parts.append(part)
     if all(balanced is original for balanced, original in zip(balanced_parts, parts)):
         return bundle
     balanced_bundle = dict(bundle)

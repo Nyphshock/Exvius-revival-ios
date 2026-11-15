@@ -3,6 +3,11 @@
 Each entry is one update to this repo. To update: in your repo folder run `git pull`, then from `ios-server` run `docker compose build && docker compose up -d`. Your save isn't touched. Open the game twice afterwards so it picks up the new data.
 
 ## 2026-11-14: Vortex unit drops credited
+## 2026-11-15: Trial boss stat tuning
+
+- Attack of Antenolla and all ten enemy parts in Surging Menace now receive the configured stat multipliers: ATK +20%, DEF +60%, MAG +20%, SPR +50%, and HP x65. Bomb self-destruction damage scales with its increased HP.
+
+## 2026-11-14: Vortex unit drops credited
 
 - Units dropped in Vortex dungeons (Cactuar Dunes, Gil Snapper's Cave, Vaults) are now added to your account even if the game doesn't report them.
 
