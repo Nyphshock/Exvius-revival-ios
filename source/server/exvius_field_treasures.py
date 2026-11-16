@@ -69,7 +69,7 @@ def _mission_treasures(out, request):
     if (attempt.get('mid') != mid or attempt.get('status') != 'completed'
             or not attempt.get('normal_rewards_recorded')):
         return out
-    auto_collect = attempt.get('cleared') is True and _is_story_exploration(mid)
+    auto_collect = attempt.get('cleared') is True and _is_exploration(mid)
     # Opened-chest tuples arrive per kind (`MissionResultInfoBase::toJsonGroup`, GL): items Z7G0yxXe, equipment
     # Mh1BA4uv, materia 30u6XYiB, key items 95JxZzuG (CHEST_CHANNELS); R1kg3EBA is also read. Until 2026-11-12
     # only Z7G0yxXe and R1kg3EBA were read, so equipment, materia and key-item chests opened but never paid.
@@ -114,11 +114,10 @@ def _mission_treasures(out, request):
     return out
 
 
-def _is_story_exploration(mid):
-    from player_state import is_main_story_mission, mission_row
+def _is_exploration(mid):
+    from player_state import mission_row
     mission = mission_row(mid)
-    return bool(mission and str(mission.get('Y4VoF8yu')) == '2'
-                and is_main_story_mission(mid))
+    return bool(mission and str(mission.get('Y4VoF8yu')) == '2')
 
 
 @lru_cache(maxsize=1)

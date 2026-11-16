@@ -53,8 +53,7 @@ def _doc() -> dict:
 
 
 def _is_exploration(mid) -> bool:
-    from player_state import mission_row
-    return str((mission_row(mid) or {}).get('Y4VoF8yu')) == '2'
+    return str(mid) in _doc().get('missions', {})
 
 
 def roll(mid, rng=random) -> dict:
