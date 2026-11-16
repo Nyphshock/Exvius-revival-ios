@@ -842,6 +842,9 @@ def panel_extra_rows(picked=None):
 
 
 def panel_extra(spec, req):
+    from ffbe_player import panel_quest_available
+    if not panel_quest_available(State.player):
+        return _refuse(spec, "panel quest is unavailable before the 2021-05-27 checkpoint")
     node = _node(req, "QxrSeO56") or {}
     schedule, gid, key = (str(node.get(k) or "") for k in ("fK3W9qYA", "zF6QIY2r", "xm7c08IS"))
     column = _panel_column(key)

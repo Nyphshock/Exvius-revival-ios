@@ -421,6 +421,8 @@ The Vortex archive and summon banners are grouped by their earliest known Global
 
 Unlocks are cumulative: reaching a later checkpoint opens all earlier seasons. Collaboration banners and events are also included in their date-based season; their separate Collab filter remains. Stock permanent summons stay available. When a release date is missing, an existing season label is used if available; otherwise the item stays in its existing Standard, Collab, Permanent, or Other group.
 
+Panel Quest follows its 2021-05-27 Global introduction and opens after Scorn of Tiamat and all earlier trial checkpoints. Its friend-invite panel is already complete; its reward must still be claimed normally. Restart the game after updating so it downloads the revised tables.
+
 The summon list also hides redundant featured lineups: when one banner's featured units are a subset of another's (or identical), only the newer banner is kept, regardless of cost, steps or other offers. If they share a release date, the banner with more featured units wins.
 
 New Vortex gate rows use archived event names to select their FFBE Wiki category tab. The map includes all 35 Enhance, 8 Special Vortex and 10 Nemeses pages, plus a display-name alias for Unit Popularity Contest; it is in `source/server/event_vortex_tabs.json`. Existing native rows keep their original tab, and names without a category match default to Event (1). Chronicle Battle names are not yet represented in the current event archive. Set `EVENT_GATE_TAB` only if you want to force all generated rows onto one tab.

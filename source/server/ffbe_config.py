@@ -807,11 +807,11 @@ PQ_IS_NEW = "uX54AqwV"                    # -> +0x30 IsNew (true iff the wire va
 # wrong, this format is the first thing to change. `medium`.
 PANEL_QUEST_WINDOW_FORMAT = "%Y-%m-%d %H:%M:%S"
 PANEL_QUEST_WINDOW_DAYS = 365
-# The groups served when no season is loaded. **The icon is on by construction** -- its `F_FUNCTION_MST` gate
-# ships true, so the tile is visible and tappable in a default run -- which means the SCREEN must work in a
-# default run too. Hanging it off the season facet alone was a wiring mistake: `seasons.json` ships
-# `"default": "off"`, so `default_events` never applied and the tap kept erroring with no season selected. A
-# season's `events.panel_quest_groups` OVERRIDES this list; it does not enable it.
+# The panel unlocks with the trial preceding its Global introduction. A season's selection overrides the
+# default group only after this checkpoint has been reached.
+PANEL_QUEST_RELEASE = "2021-05-27"
+PANEL_QUEST_UNLOCK_SWITCH = "90019999"
+PANEL_QUEST_UNLOCK_INDEX = 280  # unused type-101 switch bit in the shipped table
 #
 # 10001, NOT the first group by number. `F_TEXT_PANEL_QUEST_NAME` names the quests as
 # `MST_PANEL_QUEST_NAME_<quest row id>` -- the id VERBATIM, no arithmetic (group 10001's rows are 1000101..1000109,
@@ -1569,6 +1569,9 @@ __all__ = [
     "PQ_IS_NEW",
     "PANEL_QUEST_WINDOW_FORMAT",
     "PANEL_QUEST_WINDOW_DAYS",
+    "PANEL_QUEST_RELEASE",
+    "PANEL_QUEST_UNLOCK_SWITCH",
+    "PANEL_QUEST_UNLOCK_INDEX",
     "PANEL_QUEST_DEFAULT_GROUPS",
     "PANEL_QUEST_NAMED_GROUPS",
     "SP_CHALLENGE_REQUEST",

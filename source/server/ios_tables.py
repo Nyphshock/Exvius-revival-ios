@@ -85,6 +85,8 @@ MISSION = ("F_MISSION_MST", "24Eka6wL", "naJ3P84b")
 UNIT = ("F_UNIT_MST", "SsidX62G", "UW0D8ouL")
 # The Vortex tile order (vortex_order.py, 2026-11-10): the client sorts event areas by `Z0EN6jSh`.
 AREA = ("F_AREA_MST", "Fvix6V0n", "pR2DHS6i")
+FUNCTION = ("F_FUNCTION_MST", "6wibj9m8", "sy6GRuY2")
+SWITCH = ("F_SWITCH_MST", "T46RpNZH", "AUx51pni")
 # Map pack sizes (`JwbkKrjA`, the common_lang file; ResourceSizeMst). The Farplane pack's row gets the size of
 # the pack actually served, or the phone downloads it again on every visit (captain_menu.served_size, 2026-11-10).
 # The second column (`mYtcPkQQ`) is never read by the game (the name isn't in libgame).
@@ -285,6 +287,8 @@ def table_bump(spec, *roots) -> int:
         import vortex_order
         order = vortex_order.priorities()
         return 1000 + zlib.crc32(json.dumps(order, sort_keys=True).encode()) % 1000 if order else 0
+    if spec in (FUNCTION, SWITCH):
+        return 1000
     return 0
 
 
@@ -293,7 +297,7 @@ def version_bumps() -> dict[str, int]:
     import ios_texts
     out = {RESOURCE[0]: version_bump(), ios_texts.INDEX[0]: ios_texts.index_bump()}
     for spec in (RESOURCE_VERSION, RESOURCE_MAP_VERSION, RESOURCE_CHECKSUM, QUEST, URL, CHALLENGE, MISSION, UNIT, AREA,
-                 MAP_CHECKSUM, SELECT_UNIT, VISION_CARD, MAP_EXT, ABILITY_EXPLAIN):
+                 MAP_CHECKSUM, SELECT_UNIT, VISION_CARD, MAP_EXT, ABILITY_EXPLAIN, FUNCTION, SWITCH):
         out[spec[0]] = table_bump(spec)
     if refetch_tables():
         for name in REFETCH:
@@ -325,7 +329,7 @@ def _which(rel: str):
     if version_bump() and _path(RESOURCE[1]).search(rel):
         return RESOURCE
     for spec in (RESOURCE_VERSION, RESOURCE_MAP_VERSION, RESOURCE_CHECKSUM, QUEST, URL, CHALLENGE, MISSION, UNIT, AREA,
-                 MAP_CHECKSUM, SELECT_UNIT, VISION_CARD, MAP_EXT, ABILITY_EXPLAIN):
+                 MAP_CHECKSUM, SELECT_UNIT, VISION_CARD, MAP_EXT, ABILITY_EXPLAIN, FUNCTION, SWITCH):
         if _path(spec[1]).search(rel) and table_bump(spec):
             return spec
     return None
@@ -560,6 +564,42 @@ def patch_ability_explain(raw: bytes) -> tuple[bytes, int]:
     return ("\n".join(out) + "\n").encode("ascii"), changed
 
 
+def patch_panel_function(raw: bytes) -> tuple[bytes, int]:
+    from ffbe_config import PANEL_QUEST_UNLOCK_SWITCH
+    out, changed, found = [], 0, 0
+    for line, row, double in _rows(raw, FUNCTION[2]):
+        if row.get("G1nfeht7") == "FUNCTION_PANEL_QUEST":
+            found += 1
+            if row.get("juA0Z4m7") != PANEL_QUEST_UNLOCK_SWITCH:
+                line = _encrypt(FUNCTION[2], dict(row, juA0Z4m7=PANEL_QUEST_UNLOCK_SWITCH), double)
+                changed += 1
+        out.append(line)
+    if found != 1:
+        raise ValueError(f"Expected one Panel Quest function row, found {found}")
+    return ("\n".join(out) + "\n").encode("ascii"), changed
+
+
+def patch_panel_switch(raw: bytes) -> tuple[bytes, int]:
+    from ffbe_config import PANEL_QUEST_UNLOCK_INDEX, PANEL_QUEST_UNLOCK_SWITCH
+    rows = list(_rows(raw, SWITCH[2]))
+    if not rows:
+        raise ValueError("F_SWITCH_MST is empty")
+    found = False
+    for _, row, _ in rows:
+        same_id = str(row.get("8vAYn3IX")) == PANEL_QUEST_UNLOCK_SWITCH
+        same_bit = str(row.get("5opcUT9t")) == "101" and str(row.get("QLfe23bu")) == str(PANEL_QUEST_UNLOCK_INDEX)
+        if same_id or same_bit:
+            if not (same_id and same_bit) or found:
+                raise ValueError("Panel Quest switch ID or bit already belongs to another switch")
+            found = True
+    if found:
+        return raw, 0
+    added = {"8vAYn3IX": PANEL_QUEST_UNLOCK_SWITCH, "5opcUT9t": "101",
+             "QLfe23bu": str(PANEL_QUEST_UNLOCK_INDEX)}
+    out = [line for line, _, _ in rows] + [_encrypt(SWITCH[2], added, rows[0][2])]
+    return ("\n".join(out) + "\n").encode("ascii"), 1
+
+
 def patch_map_ext(raw: bytes) -> tuple[bytes, int]:
     """Remove Farplane stand-in scene ids; an empty row list is never loaded by the client."""
     out, changed = [], 0
@@ -710,6 +750,12 @@ def serve(rel: str, *roots: str | None) -> tuple[bytes | None, str | None]:
         if spec == ABILITY_EXPLAIN:
             data, changed = patch_ability_explain(open(src, "rb").read())
             return data, f"{os.path.basename(src)}, {changed} restored ability description(s) in English"
+        if spec == FUNCTION:
+            data, changed = patch_panel_function(open(src, "rb").read())
+            return data, f"{os.path.basename(src)}, {changed} Panel Quest unlock row(s) updated"
+        if spec == SWITCH:
+            data, changed = patch_panel_switch(open(src, "rb").read())
+            return data, f"{os.path.basename(src)}, {changed} Panel Quest switch row(s) added"
         if spec == MAP_EXT:
             if not farplane_scenes():
                 return open(src, "rb").read(), f"{os.path.basename(src)}, shipped rows (EXVIUS_FARPLANE_SCENES=0)"

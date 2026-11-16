@@ -839,6 +839,12 @@ def serve_switches(spec, reply_id=None, is_battle_bundle=False, spec_key=None):
         c = _switch_container(spec, stype)
         if c is not None:
             wanted[stype] = c
+    panel_bits = list(wanted[SWITCH_TYPE_MISSION].ljust(PANEL_QUEST_UNLOCK_INDEX // 4 + 1, "0"))
+    offset, bit = divmod(PANEL_QUEST_UNLOCK_INDEX, 4)
+    nibble = int(panel_bits[offset], 16)
+    mask = 8 >> bit
+    panel_bits[offset] = format(nibble | mask if panel_quest_available(State.player) else nibble & ~mask, "x")
+    wanted[SWITCH_TYPE_MISSION] = "".join(panel_bits)
     # Only groups that ALREADY carry switch rows may be rewritten or receive a synthesised type.
     switch_groups = [key for key, rows in spec.items()
                      if isinstance(rows, list)
@@ -1670,6 +1676,9 @@ def claim_panel_quest(spec, reply_id, plaintext=None):
     if reply_id != PANEL_QUEST_CLAIM_REQUEST or State.player is None:
         return spec
     spec = _as_spec(spec)
+    if not panel_quest_available(State.player):
+        _note("panel quest claim: unavailable before the 2021-05-27 checkpoint")
+        return spec
     player = State.player
     claims = _request_obj(plaintext).get(PANEL_QUEST_CLAIM_GROUP) if plaintext else None
     if not isinstance(claims, list) or not claims:
@@ -2493,6 +2502,13 @@ def deliver_catchup_rewards(spec, reply_id):
 # The screen sends one request and reads three server-side groups; the ROWS and the NAMES are shipped MST the
 # client must fetch (see ffbe_config's block). Selection comes from the season facet; content from the tables.
 _PQ: dict = {}
+
+
+def panel_quest_available(player) -> bool:
+    from trial_progression import release_is_available
+    return player is not None and release_is_available(player, PANEL_QUEST_RELEASE)
+
+
 def panel_quest_tables() -> dict:
     """`{"groups": {gid: row}, "quests": {gid: [row…]}}` from the two shipped MST tables, loaded once.
 
@@ -2542,11 +2558,10 @@ def panel_quest_picked() -> list:
     """The selected `[(groupId, groupRow)]`, season facet over `PANEL_QUEST_DEFAULT_GROUPS`.
 
     ONE selection, two callers -- the screen's opener and the CLAIM, which must send the same full row set
-    for the same reason the SP-challenge claim does (see `panel_quest_info_rows`). A season OVERRIDES the
-    default; it does not enable it, because the icon is on by construction and a visible, tappable screen
-    that only works under a season is a broken default.
+    for the same reason the SP-challenge claim does (see `panel_quest_info_rows`). A season overrides the
+    default group selection after the historical checkpoint.
     """
-    if State.player is None:
+    if not panel_quest_available(State.player):
         return []
     season = getattr(st, "SEASON", None)
     wanted = (season.panel_quest_groups if season is not None else []) or list(PANEL_QUEST_DEFAULT_GROUPS)
@@ -2617,6 +2632,10 @@ def serve_panel_quest(spec, reply_id):
     # that as a description instead of a requirement is what made the first version a silent no-op: it guarded
     # `isinstance(spec, dict)`, returned the None untouched, and the client got the same empty body as before.
     spec = _as_spec(spec)
+    if not panel_quest_available(State.player):
+        _note("panel quest: unavailable before the 2021-05-27 checkpoint")
+        return dict(spec, **{PANEL_QUEST_STATUS_TAG: [], PANEL_QUEST_SCHEDULE_TAG: [],
+                             PANEL_QUEST_INFO_TAG: [], "jksIZE9U": []})
     picked = panel_quest_picked()
     if not picked:
         return spec
@@ -3440,6 +3459,8 @@ def player_progress(quest_id: str, meta: dict) -> int:
     player = State.player
     stored = player.progress_value(_progress_key(meta['family'], meta['schedule'], quest_id))
     code = meta['cond']
+    if meta['family'] == 'panelquest' and code == '14':
+        return meta['max']
     archive = {'2': 'ARENA_BATTLE_CNT', '3': 'ARENA_WIN_CNT', '8': 'CLSM_BATTLE_CNT',
                '28': 'TOTAL_UNIT_CLASS_UP', '29': 'TOTAL_UNIT_MIX', '38': 'TOTAL_UNIT_RARE7_CLASS_UP',
                '41': 'TOTAL_GIL_GET', '55': 'TOTAL_NV_UNIT_GET_CNT'}
