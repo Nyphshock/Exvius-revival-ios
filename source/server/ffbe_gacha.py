@@ -286,6 +286,34 @@ def gacha_only_ids() -> set:
         except OSError:
             return set()
     return {t for t in (s.strip() for s in raw.replace(",", " ").split()) if t}
+
+
+def _ffv_gilgamesh_fix(banner: dict) -> dict:
+    """Restore the 5-star FFV Gilgamesh omitted from both historical banner records."""
+    if str(banner.get("id")) not in {"800090", "9100016"}:
+        return banner
+    unit_id = "205000805"
+    out = copy.deepcopy(banner)
+    community = dict(out.get("community") or {})
+    community["unit_ids"] = list(dict.fromkeys([unit_id, *(community.get("unit_ids") or [])]))
+    out["community"] = community
+    pool = out.get("pool")
+    if not isinstance(pool, dict):
+        return out
+    tiers = [dict(tier) for tier in pool.get("tiers") or []]
+    tier = next((row for row in tiers if str(row.get("rarity")) == "5"), None)
+    if tier is None:
+        return out
+    tier["units"] = list(dict.fromkeys([*(tier.get("units") or []), unit_id]))
+    featured = list(tier.get("featured") or [])
+    if unit_id not in featured:
+        featured.append(unit_id)
+        tier["featured_share"] = 1 / 3
+    tier["featured"] = featured
+    out["pool"] = dict(pool, tiers=tiers)
+    return out
+
+
 def all_banners() -> list:
     """Catalogue + community + authored; the authored (curated FOCUSED SET) OVERRIDES by id so its exact
     art/cost/pool is kept. Ids never collide (generated/catalogue 1-8xxxxx, community 9xxxxxx, curated low).
@@ -309,6 +337,9 @@ def all_banners() -> list:
     for b in late_banners.banners():
         by_id[str(b["id"])] = b
     late_banners.apply(by_id)
+    for bid in ("800090", "9100016"):
+        if bid in by_id:
+            by_id[bid] = _ffv_gilgamesh_fix(by_id[bid])
     # Archive identity merging shows a replacement and its calendar alias once.
     # Keep both IDs resolvable for requests already issued by an older client.
     only = gacha_only_ids()
@@ -702,6 +733,10 @@ def gacha_groups(banners: list) -> dict:
         panel.append({"LFoU0M3v": str(b.get("panel_id", "")), "X1IuZnj2": str(b["id"]),
                       "vFqVXP19": str(b.get("panel_group_id", ""))})
         pool_rows = b.get("pool") if isinstance(b.get("pool"), list) else []
+        from player_state import uses_shared_rare_pool
+        if pool_rows and uses_shared_rare_pool(b):
+            from player_state import summon_pool
+            pool_rows = summon_pool(b)
         for i, entry in enumerate(pool_rows):
             pgroup.append({"vFqVXP19": str(b.get("panel_group_id", "")),
                            "q4m8aKr0": str(b.get("detail_id", "")),

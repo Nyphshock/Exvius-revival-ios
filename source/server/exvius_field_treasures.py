@@ -69,7 +69,8 @@ def _mission_treasures(out, request):
     if (attempt.get('mid') != mid or attempt.get('status') != 'completed'
             or not attempt.get('normal_rewards_recorded')):
         return out
-    auto_collect = attempt.get('cleared') is True and _is_exploration(mid)
+    dungeon = _exploration_dungeon(mid)
+    auto_collect = attempt.get('cleared') is True and dungeon is not None
     # Opened-chest tuples arrive per kind (`MissionResultInfoBase::toJsonGroup`, GL): items Z7G0yxXe, equipment
     # Mh1BA4uv, materia 30u6XYiB, key items 95JxZzuG (CHEST_CHANNELS); R1kg3EBA is also read. Until 2026-11-12
     # only Z7G0yxXe and R1kg3EBA were read, so equipment, materia and key-item chests opened but never paid.
@@ -84,13 +85,15 @@ def _mission_treasures(out, request):
             continue
         if not missions and (row.get('town') or row.get('towns')):
             continue
+        resources = set(map(str, row.get('resources', [])))
+        map_treasure = bool(dungeon and (dungeon + '0100' in resources or iid.startswith(dungeon)))
         entries = row['rewards'].split(',')
         if any(int(entry.split(':')[0]) not in (*CHEST_CHANNELS, 30, 50, 51, 60) for entry in entries):
             continue
         was_opened = (not row['switch'] or str(row['switch']) in opened)
         reported_all = all(entry + ':' + str(row['switch']) in reported for entry in entries)
-        auto_eligible = (auto_collect and mid in missions
-                         and not (row.get('town') or row.get('towns')))
+        auto_eligible = (auto_collect and not (row.get('town') or row.get('towns'))
+                         and (mid in missions or (not missions and map_treasure)))
         if not (was_opened and reported_all) and not auto_eligible:
             continue
         if _credit(iid, row):
@@ -114,10 +117,19 @@ def _mission_treasures(out, request):
     return out
 
 
-def _is_exploration(mid):
+def _exploration_dungeon(mid):
     from player_state import mission_row
     mission = mission_row(mid)
-    return bool(mission and str(mission.get('Y4VoF8yu')) == '2')
+    if not mission:
+        return None
+    is_exploration = str(mission.get('Y4VoF8yu')) == '2'
+    if not is_exploration:
+        import battle_content
+        is_exploration = battle_content.resource_kind(mid) == 'exploration'
+    if not is_exploration:
+        return None
+    dungeon = str(mission.get('U9iHsau3') or '')
+    return dungeon if dungeon not in ('', '0') else None
 
 
 @lru_cache(maxsize=1)

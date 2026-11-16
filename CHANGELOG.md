@@ -2,6 +2,16 @@
 
 Each entry is one update to this repo. To update: in your repo folder run `git pull`, then from `ios-server` run `docker compose build && docker compose up -d`. Your save isn't touched. Open the game twice afterwards so it picks up the new data.
 
+## 2026-11-16: Exploration rewards, progression and summon rates
+
+- Vortex explorations now show and award catalogued collection points and map chests, including chests linked by map resource or dungeon when the mission record has no explicit association. Chests are credited after a boss victory.
+- Adventurer Rewards unlocks with the historical replay from 2021-03-31. Before then, its event data, objective progress and tier mail are withheld.
+- Pre-NV shared off-banner units now come only from the Rare Summon pool, limited by both the replay date and the player's next uncleared trial checkpoint; each banner's own featured units remain available.
+- Explicit unit pools now apply limited, seasonal and reward-unit exclusions to off-banner candidates too; those units remain available on banners that feature them.
+- Pre-NV featured banners use consistent unit rates: 3★ 78%, 4★ 19%, 5★ 3%. Featured shares are 19.5%, 4.75% and 1% respectively; mixed reward pools and banners from the NV era onward keep their own rates.
+- Pre-NV featured units now include their own evolution forms from base rarity through 5★, each in its matching rate-up tier. NV-era banners retain their native forms and pools.
+- Gilgamesh (FFV) is included in the Final Fantasy V banner's 5★ featured pool.
+
 ## 2026-11-16: Expedition progression
 
 - Expeditions now unlock at their historical trial checkpoint.

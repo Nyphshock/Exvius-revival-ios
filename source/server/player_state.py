@@ -1097,6 +1097,68 @@ def unit_roots_by_rarity() -> dict:
     return _UNIT_ROOTS
 
 
+_UNIT_FAMILY_FORMS = None
+
+
+def _pre_nv_banner(banner: dict) -> bool:
+    release = (banner.get('community') or {}).get('release') or banner.get('release')
+    if not release:
+        return False
+    try:
+        from datetime import date
+        import replay
+        return date.fromisoformat(str(release)[:10]) < replay.nv_era()
+    except (ImportError, TypeError, ValueError):
+        return False
+
+
+def _featured_family_ids(banner: dict, max_rarity: int = 5) -> set[str]:
+    """All named rarity forms through 5★ for each unit featured by this banner."""
+    featured = {str(uid) for uid in ((banner.get('community') or {}).get('unit_ids') or [])}
+    pool = banner.get('pool')
+    if isinstance(pool, dict):
+        featured.update(str(uid) for tier in pool.get('tiers') or []
+                        for uid in (tier.get('featured') or []))
+    if not _pre_nv_banner(banner):
+        return featured
+    global _UNIT_FAMILY_FORMS
+    if _UNIT_FAMILY_FORMS is None:
+        forms: dict[str, list[tuple[str, int]]] = {}
+        try:
+            rows = _load_ndjson('F_UNIT_MST.ndjson').get('__rows__', [])
+        except (OSError, ValueError):
+            rows = []
+        for row in rows:
+            mid = str(row.get(UNIT_KEY) or '')
+            root = str(row.get('woghJa61') or '')
+            try:
+                rarity = int(row.get('9fW0TePj') or 0)
+            except (TypeError, ValueError):
+                continue
+            if mid and root and rarity:
+                forms.setdefault(root, []).append((mid, rarity))
+        _UNIT_FAMILY_FORMS = forms
+    result = set(featured)
+    for uid in featured:
+        try:
+            row = unit_mst(uid) or {}
+        except (OSError, ValueError):
+            row = {}
+        root = str(row.get('woghJa61') or uid)
+        try:
+            root_row = unit_mst(root) or row
+        except (OSError, ValueError):
+            root_row = row
+        try:
+            base_rarity = int(root_row.get('9fW0TePj') or row.get('9fW0TePj') or 0)
+        except (TypeError, ValueError):
+            base_rarity = 0
+        for form, rarity in _UNIT_FAMILY_FORMS.get(root, []):
+            if (not base_rarity or base_rarity <= rarity <= max_rarity) and rarity <= max_rarity:
+                result.add(form)
+    return result
+
+
 def nv_shift_targets() -> set:
     """Ids another `F_UNIT_MST` row's `JPW8Vs40` points at (self-references excluded) -- the shift FORMS.
 
@@ -1237,12 +1299,22 @@ def expand_pool(banner: dict) -> list:
         import replay
         cutoff = replay.pool_cutoff(banner)
     except Exception:  # noqa: BLE001 -- no replay limit
+        replay = None
         cutoff = None
+    try:
+        from datetime import timedelta
+        from ffbe_state import State
+        from trial_progression import FINAL_CONTENT_DATE, next_checkpoint_date
+        if State.player is not None:
+            checkpoint = next_checkpoint_date(State.player)
+            progression_cutoff = (checkpoint - timedelta(days=1) if checkpoint is not None
+                                  else FINAL_CONTENT_DATE)
+            cutoff = min(cutoff, progression_cutoff) if cutoff is not None else progression_cutoff
+    except (ImportError, AttributeError, TypeError, ValueError):
+        pass
     if cutoff is not None:
         import replay
-        featured_ids = {str(u) for t in ((pool or {}).get("tiers") or [] if isinstance(pool, dict) else [])
-                        for u in (t.get("featured") or [])}
-        featured_ids |= {str(u) for u in ((banner.get("community") or {}).get("unit_ids") or [])}
+        featured_ids = _featured_family_ids(banner)
         allowed = lambda u: str(u) in featured_ids or replay.released_by(u, cutoff)  # noqa: E731
     else:
         allowed = lambda u: True  # noqa: E731
@@ -1275,30 +1347,40 @@ def expand_pool(banner: dict) -> list:
     cost = cost[0] if isinstance(cost, list) and cost else cost
     keep_materials = isinstance(cost, dict) and str(cost.get("kind")) == "friend_point"
     tiers = (pool or {}).get("tiers") or []
-    # A community banner names its rate-up units (`community.unit_ids`) without placing them in a tier:
-    # they are the "Rate up for the featured units!" of its art, so they share the top tier's rate.
-    rate_up = [str(u) for u in ((banner.get("community") or {}).get("unit_ids") or [])]
-    if rate_up and tiers and not any(t.get("featured") for t in tiers):
-        top = max(tiers, key=lambda t: int(t.get("rarity") or 0))
-        tiers = [dict(t, featured=rate_up, featured_share=0.5) if t is top else t for t in tiers]
+    family_ids = _featured_family_ids(banner)
+    if family_ids:
+        expanded_tiers = []
+        for tier in tiers:
+            try:
+                tier_rarity = int(tier.get('rarity') or 0)
+            except (TypeError, ValueError):
+                tier_rarity = 0
+            forms = [uid for uid in family_ids
+                     if int((unit_mst(uid) or {}).get('9fW0TePj') or 0) == tier_rarity]
+            if forms:
+                existing = list(tier.get('featured') or [])
+                tier = dict(tier, featured=list(dict.fromkeys([*existing, *forms])))
+                if 'featured_share' not in tier:
+                    tier['featured_share'] = 0.5
+            expanded_tiers.append(tier)
+        tiers = expanded_tiers
     # Story, reward, Star Quartz and Raid Summon units never came from a rarity tier's draw on Global
     # (summon_exclusions.py, operator 2026-11-10); a featured one is added back below.
     import summon_exclusions
     left_out = summon_exclusions.excluded()
     # Limited, collaboration and seasonal units came only from the banners that featured them (operator,
     # 2026-11-10): out of a rarity tier's default draw unless this banner features them.
-    banner_featured = {str(u) for t in tiers for u in (t.get("featured") or [])}
-    banner_featured |= {str(u) for u in ((banner.get("community") or {}).get("unit_ids") or [])}
+    banner_featured = family_ids
     left_out = left_out | (summon_exclusions.limited_out() - banner_featured)
     out: list = []
     for tier in tiers:
         rate = max(0.0, float(tier.get("rate", 0)))
         if rate <= 0:
             continue
-        units = [str(u) for u in (tier.get("units") or [u for u in roots.get(str(tier.get("rarity")), [])
-                                                          if (keep_materials or not u.startswith("9"))
-                                                          and u not in left_out])
-                 if allowed(u)]
+        candidates = tier.get("units") or [u for u in roots.get(str(tier.get("rarity")), [])
+                                             if keep_materials or not u.startswith("9")]
+        units = [str(u) for u in candidates
+                 if allowed(u) and (str(u) not in left_out or str(u) in banner_featured)]
         # A featured unit drawn at its own rarity (an NV unit is not a base 5★ root) still belongs here.
         units += [u for u in (str(x) for x in (tier.get("featured") or [])) if u not in units]
         if not units:
@@ -1322,6 +1404,100 @@ def expand_pool(banner: dict) -> list:
     return _only_named(out)
 
 
+_RATEUP_PROFILE = {3: (0.78, 0.25), 4: (0.19, 0.25), 5: (0.03, 1 / 3)}
+_RARE_SUMMON_TEMPLATE = None
+_RATEUP_PROFILE_BANNERS = frozenset(map(str, range(9100000, 9100019))) | {'800090'}
+
+
+def uses_shared_rare_pool(banner: dict) -> bool:
+    if not _pre_nv_banner(banner) or banner.get('reward_pool'):
+        return False
+    pool = banner.get('pool')
+    if isinstance(pool, list):
+        if any(not isinstance(row, dict) or not row.get('unit_id') for row in pool):
+            return False
+    elif not isinstance(pool, dict):
+        return False
+    featured = {str(uid) for uid in ((banner.get('community') or {}).get('unit_ids') or [])}
+    if isinstance(pool, dict):
+        featured.update(str(uid) for tier in pool.get('tiers') or []
+                        for uid in (tier.get('featured') or []))
+    return bool(featured)
+
+
+def uses_rateup_profile(banner: dict) -> bool:
+    return str(banner.get('id')) in _RATEUP_PROFILE_BANNERS and uses_shared_rare_pool(banner)
+
+
+def apply_rateup_profile(banner: dict, pool: list) -> list:
+    """Apply the shared rate-up table to a unit-only featured pool after its history filters."""
+    if not uses_rateup_profile(banner):
+        return pool
+    out = copy.deepcopy(pool)
+    featured_ids = _featured_family_ids(banner)
+    for rarity, (tier_rate, featured_share) in _RATEUP_PROFILE.items():
+        rows = [row for row in out if row.get('unit_id') is not None
+                and int(row.get('rarity') or (unit_mst(row['unit_id']) or {}).get('9fW0TePj') or 0) == rarity]
+        if not rows:
+            continue
+        featured = [row for row in rows if str(row['unit_id']) in featured_ids]
+        offbanner = [row for row in rows if str(row['unit_id']) not in featured_ids]
+        if featured and offbanner:
+            featured_total, offbanner_total = tier_rate * featured_share, tier_rate * (1 - featured_share)
+        elif featured:
+            featured_total, offbanner_total = tier_rate, 0.0
+        else:
+            featured_total, offbanner_total = 0.0, tier_rate
+        for row in featured:
+            row['rate'] = featured_total / len(featured)
+        for row in offbanner:
+            row['rate'] = offbanner_total / len(offbanner)
+    return out
+
+
+def _rare_summon_template() -> dict | None:
+    global _RARE_SUMMON_TEMPLATE
+    if _RARE_SUMMON_TEMPLATE is None:
+        from ffbe_gacha import authored_banners
+        _RARE_SUMMON_TEMPLATE = next((banner for banner in authored_banners()
+                                      if str(banner.get('id')) == '9'), {})
+    return _RARE_SUMMON_TEMPLATE or None
+
+
+def _shared_rare_summon_pool(banner: dict) -> list:
+    """The off-banner candidates from Rare Summon, expanded with this player's history limits."""
+    rare = _rare_summon_template()
+    if rare is None:
+        return []
+    shared = copy.deepcopy(banner)
+    shared['pool'] = copy.deepcopy(rare.get('pool') or {})
+    shared.pop('reward_pool', None)
+    return expand_pool(shared)
+
+
+def _featured_with_rare_shared_pool(banner: dict, featured_pool: list) -> list:
+    featured_ids = _featured_family_ids(banner)
+    featured = [row for row in featured_pool if str(row.get('unit_id')) in featured_ids]
+    shared = [row for row in _shared_rare_summon_pool(banner)
+              if str(row.get('unit_id')) not in featured_ids]
+    result, seen = [], set()
+    for row in featured + shared:
+        unit_id = str(row.get('unit_id') or '')
+        if unit_id and unit_id not in seen:
+            result.append(row)
+            seen.add(unit_id)
+    featured_total = sum(float(row.get('rate') or 0) for row in result
+                         if str(row.get('unit_id')) in featured_ids)
+    shared_total = sum(float(row.get('rate') or 0) for row in result
+                       if str(row.get('unit_id')) not in featured_ids)
+    if shared_total > 0:
+        remaining = max(0.0, 1.0 - featured_total)
+        for row in result:
+            if str(row.get('unit_id')) not in featured_ids:
+                row['rate'] = float(row.get('rate') or 0) * remaining / shared_total
+    return result
+
+
 def summon_pool(banner: dict, part: dict | None = None) -> list:
     """What one ordinary draw of `banner` picks from, by `rate`: its explicit reward list (items or units,
     `reward_pool`) or its tiers expanded (`expand_pool`). `roll_gacha` and the drop-rate page both use this.
@@ -1334,7 +1510,12 @@ def summon_pool(banner: dict, part: dict | None = None) -> list:
         banner.pop('reward_pool', None)
     reward_pool = banner.get('reward_pool')
     if not reward_pool:
-        return expand_pool(banner)
+        pool = expand_pool(banner)
+        if uses_shared_rare_pool(banner):
+            pool = _featured_with_rare_shared_pool(banner, pool)
+            if uses_rateup_profile(banner):
+                pool = apply_rateup_profile(banner, pool)
+        return pool
     pool = copy.deepcopy(reward_pool)
     for entry in pool:
         if entry['kind'] == 10:

@@ -14,6 +14,7 @@ from exvius_events import load_policy, apply_availability
 from data_paths import DATA_ROOT
 
 import copy, hashlib, json, os, time
+from datetime import date
 from functools import lru_cache
 
 from ffbe_config import *          # noqa: F401,F403 -- constants; the table has no behaviour
@@ -3673,6 +3674,13 @@ def apply_emblem_setting(plaintext, spec):
 # The shipped tables and the model live in `player_state` (`emblem_weekly_mst` / `emblem_monthly_mst` /
 # `emblem_objectives`); what is here is the WIRE: the three groups the screen reads, the objective credit a
 # mission end feeds, and the tier mail. One home for the evidence: docs/notes/emblem_event.md.
+EMBLEM_AVAILABLE_FROM = date(2021, 3, 31)
+
+
+def emblem_event_available() -> bool:
+    """The Global Adventurer Rewards campaign began on 2021-03-31; replay it only from that era onward."""
+    import replay
+    return not replay.enabled() or replay.window()['from'] >= EMBLEM_AVAILABLE_FROM
 
 
 def _emblem_window(now: float) -> tuple:
@@ -3702,7 +3710,7 @@ def deliver_emblem_tier_mail() -> list:
     client-side as a u64 and a non-numeric id can never match a receipt (the daily-login mail's measured
     lesson, 2026-09-22). Returns the ids it added.
     """
-    if State.player is None:
+    if State.player is None or not emblem_event_available():
         return []
     added = []
     for tier in State.player.emblem_pending_tiers():
@@ -3735,7 +3743,8 @@ def serve_emblem_event(spec, reply_id):
     campaign's own screen sends, so opening the screen is what seeds it -- the same shape as
     `deliver_login_mail`, which delivers on the daily-login request.
     """
-    if reply_id != EMBLEM_EVENT_REQUEST or State.player is None:
+    if (reply_id != EMBLEM_EVENT_REQUEST or State.player is None
+            or not emblem_event_available()):
         return spec
     out = _as_spec(spec)
     objectives = State.player.emblem_objectives()
@@ -3776,7 +3785,7 @@ def credit_emblem_objectives(plaintext, spec):
     The mission id rides `jQsE54Iz.qo3PECw6`. Deliver any earned crest tier here so it reaches the player
     even if they never open the Adventurer Crests screen.
     """
-    if State.player is None or not plaintext:
+    if State.player is None or not plaintext or not emblem_event_available():
         return spec
     try:
         req = json.JSONDecoder().raw_decode(plaintext)[0]
