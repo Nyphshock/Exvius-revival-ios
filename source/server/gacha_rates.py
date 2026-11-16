@@ -197,7 +197,8 @@ def _guarantee_html(banner, pool, guarantee, draws, slots) -> tuple[str, list]:
                          f'{_rarity_label(rarity)}{" or higher" if rarity < 7 else ""}'
                          + (f' (before the {reserved} slot{"s" if reserved != 1 else ""} below)' if reserved else '')
                          + '.')
-            tables.append((f'Guaranteed {_rarity_label(rarity)}+ draw', summon_guarantee_pool(pool, guarantee)))
+            tables.append((f'Guaranteed {_rarity_label(rarity)}+ draw',
+                           summon_guarantee_pool(pool, guarantee, banner)))
         else:
             lines.append(f'At least one {_rarity_label(rarity)}{" or higher" if rarity < 7 else ""}: '
                          'if no draw reaches it, the lowest draw is replaced with one picked from this list.')

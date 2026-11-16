@@ -1406,7 +1406,6 @@ def expand_pool(banner: dict) -> list:
 
 _RATEUP_PROFILE = {3: (0.78, 0.25), 4: (0.19, 0.25), 5: (0.03, 1 / 3)}
 _RARE_SUMMON_TEMPLATE = None
-_RATEUP_PROFILE_BANNERS = frozenset(map(str, range(9100000, 9100019))) | {'800090'}
 
 
 def uses_shared_rare_pool(banner: dict) -> bool:
@@ -1426,7 +1425,7 @@ def uses_shared_rare_pool(banner: dict) -> bool:
 
 
 def uses_rateup_profile(banner: dict) -> bool:
-    return str(banner.get('id')) in _RATEUP_PROFILE_BANNERS and uses_shared_rare_pool(banner)
+    return uses_shared_rare_pool(banner)
 
 
 def apply_rateup_profile(banner: dict, pool: list) -> list:
@@ -1524,11 +1523,12 @@ def summon_pool(banner: dict, part: dict | None = None) -> list:
     return pool
 
 
-def summon_guarantee_pool(pool: list, guarantee: dict) -> list:
+def summon_guarantee_pool(pool: list, guarantee: dict, banner: dict | None = None) -> list:
     """The rows a counted rarity guarantee (`guarantee.count`) draws from: its own `pool` if it names one,
-    else the banner's pool; either way only rows at or above `guarantee.rarity`."""
+    else the banner's pool; pre-NV unit banners use the effective shared Rare Summon pool either way."""
     floor = int(guarantee.get('rarity') or 0)
-    rows = expand_pool({'pool': guarantee['pool']}) if guarantee.get('pool') is not None else pool
+    rows = (pool if banner is not None and uses_shared_rare_pool(banner) else
+            expand_pool({'pool': guarantee['pool']}) if guarantee.get('pool') is not None else pool)
     return [e for e in rows if int(e.get('rarity') or 0) >= floor]
 
 
@@ -4561,7 +4561,7 @@ class PlayerState:
         guaranteed_count = int(guarantee.get('count', 1))
         if reward_pool and guarantee:
             return None  # Mixed item pools have their own explicit published weights.
-        guaranteed_pool = summon_guarantee_pool(pool, guarantee)
+        guaranteed_pool = summon_guarantee_pool(pool, guarantee, banner)
         if (guaranteed_count < 1 or guaranteed_count > draws or
                 (guarantee.get('rarity') is not None and not guaranteed_pool)):
             print('    gacha refused: guaranteed slots cannot be fulfilled by this pool', flush=True)

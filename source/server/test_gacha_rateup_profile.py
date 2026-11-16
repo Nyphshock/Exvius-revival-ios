@@ -76,7 +76,7 @@ class RateUpProfileTests(unittest.TestCase):
         self.assertEqual({row['unit_id'] for row in actual},
                          {'featured', 'rare-shared-3', 'rare-shared-4', 'rare-shared-5'})
         rates = {row['unit_id']: row['rate'] for row in actual}
-        self.assertAlmostEqual(rates['featured'], 0.1)
+        self.assertAlmostEqual(rates['featured'], 0.01)
         self.assertAlmostEqual(sum(rates.values()), 1.0)
 
     def test_listed_featured_banner_uses_the_profile(self):
@@ -258,6 +258,44 @@ class RateUpProfileTests(unittest.TestCase):
     def test_nv_era_banner_keeps_native_forms_and_pool(self):
         banner = {
             'id': '9200999',
+            'release': '2020-08-20',
+            'community': {'unit_ids': ['featured-5']},
+            'pool': {'tiers': [{'rarity': 5, 'rate': 0.05, 'featured': ['featured-5'],
+                                'featured_share': 0.75}]},
+        }
+        pool = [{'unit_id': 'featured-5', 'rarity': 5, 'rate': 0.0375},
+                {'unit_id': 'off-5', 'rarity': 5, 'rate': 0.0125}]
+
+        self.assertEqual(player_state._featured_family_ids(banner), {'featured-5'})
+        self.assertFalse(player_state.uses_shared_rare_pool(banner))
+        self.assertFalse(player_state.uses_rateup_profile(banner))
+        self.assertEqual(player_state.apply_rateup_profile(banner, pool), pool)
+
+    def test_pre_nv_four_star_guarantee_uses_current_banner_and_rare_pool(self):
+        banner = {
+            'id': '9100018',
+            'release': '2016-12-09',
+            'pool': {'tiers': []},
+            'community': {'unit_ids': ['featured-5']},
+        }
+        pool = [
+            {'unit_id': 'featured-5', 'rarity': 5, 'rate': 0.01},
+            {'unit_id': 'rare-shared-5', 'rarity': 5, 'rate': 0.02},
+            {'unit_id': 'featured-4', 'rarity': 4, 'rate': 0.0475},
+            {'unit_id': 'rare-shared-4', 'rarity': 4, 'rate': 0.1425},
+            {'unit_id': 'rare-shared-3', 'rarity': 3, 'rate': 0.78},
+        ]
+        old_guarantee_pool = {'tiers': [{'rarity': 4, 'rate': 1.0, 'units': ['stale-unit']}]}
+
+        actual = player_state.summon_guarantee_pool(
+            pool, {'rarity': 4, 'count': 1, 'pool': old_guarantee_pool}, banner)
+
+        self.assertEqual({row['unit_id'] for row in actual}, {
+            'featured-5', 'rare-shared-5', 'featured-4', 'rare-shared-4'})
+
+    def test_nv_era_banner_keeps_native_forms_and_pool(self):
+        banner = {
+            'id': '9200998',
             'release': '2020-08-20',
             'community': {'unit_ids': ['featured-5']},
             'pool': {'tiers': [{'rarity': 5, 'rate': 0.05, 'featured': ['featured-5'],
