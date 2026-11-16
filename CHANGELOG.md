@@ -13,6 +13,11 @@ Each entry is one update to this repo. To update: in your repo folder run `git p
 - Pre-NV featured units now include their own evolution forms from base rarity through 5★, each in its matching rate-up tier. NV-era banners retain their native forms and pools.
 - Gilgamesh (FFV) is included in the Final Fantasy V banner's 5★ featured pool.
 
+## 2026-11-17: Summon rate display
+
+- The Drop Rates page now shows the effective per-unit chance from the same filtered pool used by the summon roll, including separate rates for each featured evolution form and the shared Rare Summon off-banner units.
+- The 4★+ guaranteed-draw rate list uses that same current banner pool.
+
 ## 2026-11-16: Expedition progression
 
 - Expeditions now unlock at their historical trial checkpoint.
