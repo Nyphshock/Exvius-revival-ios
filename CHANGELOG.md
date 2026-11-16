@@ -8,8 +8,10 @@ Each entry is one update to this repo. To update: in your repo folder run `git p
 - Banners 9100016 (Gilgamesh, Bartz, Exdeath, Faris), 9100017 (Snow, Vanille, Sazh) and 9100018 (Lightning, Fang, Hope) now unlock after the first checkpoint; their original Global dates remain unchanged for the summon replay.
 - Chamber of Crystals is included in the default Enhance Vortex gates and is dated from Global launch, so the first checkpoint does not hide it.
 - Friend support units now show the esper linked to the selected Companion slot, with its rarity and level.
+- Esper Board Reset now spends its shipped 100 Lapis, clears learned nodes, refunds their Esper SP, and preserves nodes opened with items. Retried requests cannot charge twice.
 - White Dragon, Demon Chimera, Brachiosaur and Erinyes in the Farplane Temple story battles now use the established trial scaling: HP x65, ATK/MAG x1.2, DEF x1.6 and SPR x1.5.
 - Every enemy in story quests that grant or awaken an esper now uses the same trial stat scaling. White Dragon, Demon Chimera and Brachiosaur are available from the beginning; Erinyes unlocks on 2017-09-07. Other Esper quests retain their checkpoint restrictions.
+- Esper acquisition and awakening quests are now hidden from the mission list until all trials at the preceding checkpoint are cleared. Their existing Esper-rarity requirements are preserved; the mission table version is raised so the phone fetches the updated list.
 
 ## 2026-11-14: Vortex unit drops credited
 ## 2026-11-15: Trial boss stat tuning

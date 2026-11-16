@@ -165,6 +165,7 @@ SHOP_NAME_TOKEN = "G4L0YIB2"      # the row's display name
 SHOP_USE_DIA_TOKEN = "8f7mxN3j"   # ShopMst::getUseDia -- the LAPIS price
 SHOP_PARAM_TOKEN = "xHZj7Va5"     # ShopMst::getParam -- "0" or "23:<itemId>"
 SHOP_USE_REQUEST = "73SD2aMR"     # ShopUseRequest (url token w76ThDMm)
+ESPER_BOARD_RESET_SHOP = "60"     # 幻獣ポイントリセット -- Esper board SP reset
 
 # shopId -> the state orb family the shipped row refills. The ROW names the orb; our four family keys
 # are the internal ones, so the join is ours:
@@ -715,6 +716,23 @@ def board_set_bit(mask, bit) -> str:
     except ValueError:
         val = 0
     chars[idx] = "0123456789abcdef"[val | (1 << (3 - (b & 3)))]
+    return "".join(chars)
+
+
+def board_clear_bit(mask, bit) -> str:
+    """Clear one bit from the client's nibble-array board mask without changing its length."""
+    b = int(bit)
+    idx = b >> 2
+    if idx < 0:
+        raise ValueError(f"board_clear_bit: negative bit {bit!r}")
+    chars = list(str(mask or BEAST_BOARD_NONE))
+    if idx >= len(chars):
+        return "".join(chars) or BEAST_BOARD_NONE
+    try:
+        val = int(chars[idx], 16)
+    except ValueError:
+        return "".join(chars)
+    chars[idx] = "0123456789abcdef"[val & ~(1 << (3 - (b & 3)))]
     return "".join(chars)
 
 
@@ -4712,6 +4730,68 @@ class PlayerState:
         self.dirty = True
         return True
 
+    def reset_beast_board_with_shop(self, shop_id, esper_id) -> dict | None:
+        """Use the Esper Points Reset shop to unlearn CP nodes and refund their spent points.
+
+        Item-unlocked nodes (`unlockCost` > 0) remain open and are not refunded. A retry after a successful
+        reset finds no learned nodes and therefore does not charge the shipped Lapis price again.
+        """
+        if str(shop_id) != ESPER_BOARD_RESET_SHOP:
+            return None
+        try:
+            eid = str(int(esper_id))
+        except (TypeError, ValueError):
+            print(f"    esper board reset refused: unusable esper id {esper_id!r}", flush=True)
+            return None
+        entry = self.beast_entry(eid)
+        if entry is None:
+            print(f"    esper board reset refused: esper {eid} is not owned", flush=True)
+            return None
+        shop = shop_mst(shop_id)
+        try:
+            price = int((shop or {}).get(SHOP_USE_DIA_TOKEN, 0) or 0)
+        except (TypeError, ValueError):
+            price = 0
+        if price <= 0 or str((shop or {}).get(SHOP_PARAM_TOKEN) or "0") != "0":
+            print(f"    esper board reset refused: shop {shop_id} has invalid lapis cost", flush=True)
+            return None
+
+        status = beast_status(eid, entry.get("rarity")) or {}
+        available_cp = self._beast_cp_available(entry, status.get(BEAST_CP_KEY, ""))
+        board = str(entry.get("board") or BEAST_BOARD_NONE)
+        reset_board = board
+        refunded_cp = 0
+        cleared_nodes = 0
+        for piece in board_piece_rows().values():
+            if str(piece.get(BEAST_ID)) != eid:
+                continue
+            try:
+                bit = int(piece.get(BEAST_PIECE_BIT))
+                cost = int(piece.get(BEAST_PIECE_CP_COST, 0) or 0)
+                unlock_cost = int(piece.get(BEAST_PIECE_UNLOCK_COUNT, 0) or 0)
+            except (TypeError, ValueError):
+                continue
+            if unlock_cost > 0 or not board_bit(board, bit):
+                continue
+            reset_board = board_clear_bit(reset_board, bit)
+            refunded_cp += cost
+            cleared_nodes += 1
+        if not cleared_nodes:
+            print(f"    esper board reset: esper {eid} has no learned nodes; no charge", flush=True)
+            return None
+
+        held = int(self.currencies.get("lapis_free", 0) or 0) + int(self.currencies.get("lapis_paid", 0) or 0)
+        if not self.spend_lapis(price):
+            print(f"    esper board reset refused: shop {shop_id} costs {price} lapis > held {held}", flush=True)
+            return None
+        entry["board"] = reset_board or BEAST_BOARD_NONE
+        entry["cp"] = available_cp + refunded_cp
+        entry["reset_count"] = int(entry.get("reset_count", 0) or 0) + 1
+        self.dirty = True
+        print(f"    esper board reset: esper {eid}, cleared {cleared_nodes} node(s), "
+              f"refunded {refunded_cp} SP, spent {price} lapis", flush=True)
+        return {"esper_id": eid, "cleared": cleared_nodes, "refunded_cp": refunded_cp, "price": price}
+
     def recharge_orb_with_shop(self, shop_id) -> dict | None:
         """A `ShopUseRequest` shopId -> fill one orb family to its cap for the SHIPPED lapis price.
 
@@ -4758,7 +4838,7 @@ class PlayerState:
                 "name": str(row.get(SHOP_NAME_TOKEN) or "")}
 
     def apply_shop_use(self, spec, reply_id=None, plaintext=None):
-        """`SHOP_USE_REQUEST` (`ShopUseRequest`) -> the orb recharge, plus the reply that shows it.
+        """`SHOP_USE_REQUEST` (`ShopUseRequest`) -> orb recharge or Esper reset, plus refreshed state.
 
         GATED on the reply id so it cannot leak onto another reply (`apply_carry_edit`'s precedent; when
         that step was ungated the golden replay caught it growing nine unrelated replies). The body's only
@@ -4777,6 +4857,7 @@ class PlayerState:
         if str(reply_id) != SHOP_USE_REQUEST:
             return spec
         shop_id = None
+        esper_id = None
         if plaintext:
             try:
                 req = json.JSONDecoder().raw_decode(plaintext)[0]
@@ -4785,13 +4866,16 @@ class PlayerState:
             rows = req.get("L5Nj3cKE") if isinstance(req, dict) else None
             if isinstance(rows, list) and rows and isinstance(rows[0], dict):
                 shop_id = rows[0].get(SHOP_ID_TOKEN)
+                esper_id = rows[0].get("Vt2I4RjX")
         if shop_id is None:
             print("    orb recharge: request body named no shop (L5Nj3cKE/gdR2tJI9); no state change",
                   flush=True)
+        elif str(shop_id) == ESPER_BOARD_RESET_SHOP:
+            self.reset_beast_board_with_shop(shop_id, esper_id)
         else:
             self.recharge_orb_with_shop(shop_id)
         out = dict(spec) if isinstance(spec, dict) else {}
-        out["3oU9Ktb7"] = [self._team_row()]   # placeholder -> apply_to_reply projects orbs + lapis
+        out["3oU9Ktb7"] = [self._team_row()]   # placeholder -> apply_to_reply projects team, esper and lapis
         return out
 
     def vision_card_rows(self) -> list:

@@ -251,7 +251,13 @@ def table_bump(spec, *roots) -> int:
         return 1000 if quest_rewards_shown() else 0
     if spec == URL:
         return 1001     # 1000: first build (v900 address); raise it whenever the served rows change
-    if spec in (CHALLENGE, MISSION):
+    if spec == MISSION:
+        import reward_overrides
+        rewards_bump = (1000 + zlib.crc32((spec[0] + reward_overrides.signature()).encode()) % 1000
+                        if reward_overrides.enabled() else 0)
+        # Stay above the prior first-clear-only version so cached clients fetch the checkpoint-gated rows.
+        return 2000 + rewards_bump
+    if spec == CHALLENGE:
         import reward_overrides
         if not reward_overrides.enabled():
             return 0
@@ -393,18 +399,92 @@ def patch_challenges(raw: bytes) -> tuple[bytes, int]:
 
 
 def patch_first_clears(raw: bytes) -> tuple[bytes, int]:
-    """`F_MISSION_MST` with the active wiki first-clear rewards (`1x4bG2J8`)."""
+    """Patch mission first-clear rewards and Esper quest visibility in `F_MISSION_MST`."""
+    data, first_clears, _esper_gates = patch_mission_table(raw)
+    return data, first_clears
+
+
+def esper_checkpoint_switches(mission_rows: list[dict]) -> dict[str, list[str]]:
+    """Extra native `juA0Z4m7` requirements for dated Esper quests.
+
+    Mission availability uses the same boundary as `release_is_available`: all checkpoint missions at the
+    latest checkpoint on or before a quest's Global release must be cleared. The client treats comma-separated
+    required switches as AND, so grouped checkpoints stay hidden until every trial in the group is done.
+    """
+    from datetime import date
+    import event_archive
+    from trial_progression import CHECKPOINTS
+
+    by_id = {str(row.get("qo3PECw6")): row for row in mission_rows
+             if row.get("qo3PECw6") is not None}
+    releases = dict(event_archive.quest_dates().get("missions") or {})
+    story_esper_ids = set(event_archive.MISSION_STORY_RELEASE_OVERRIDES)
+    releases.update(event_archive.MISSION_STORY_RELEASE_OVERRIDES)
+    grants_esper = re.compile(r"^820\d{2}[123]00$")
+    out = {}
+    for mission, release in releases.items():
+        mission = str(mission)
+        row = by_id.get(mission)
+        if row is None:
+            continue
+        opens_esper = any(grants_esper.fullmatch(switch.strip())
+                          for switch in str(row.get("dIPkNn61") or "").split(","))
+        if not opens_esper and mission not in story_esper_ids:
+            continue
+        try:
+            released = date.fromisoformat(str(release)[:10])
+        except ValueError:
+            continue
+        prior = [(day, missions) for day, missions in CHECKPOINTS if day <= released]
+        if not prior:
+            continue
+        _day, checkpoint_missions = max(prior, key=lambda entry: entry[0])
+        required = []
+        for checkpoint_mission in sorted(checkpoint_missions):
+            checkpoint_row = by_id.get(str(checkpoint_mission))
+            if checkpoint_row is None:
+                required = []
+                break
+            switches = [switch.strip() for switch in str(checkpoint_row.get("dIPkNn61") or "").split(",")
+                        if switch.strip() not in ("", "0")]
+            if not switches:
+                required = []
+                break
+            required.extend(switches)
+        if required:
+            out[mission] = list(dict.fromkeys(required))
+    return out
+
+
+def patch_mission_table(raw: bytes) -> tuple[bytes, int, int]:
+    """Patch first-clear rewards and add checkpoint switch requirements in one pass."""
     import reward_overrides
+    rows = list(_rows(raw, MISSION[2]))
+    checkpoint_switches = esper_checkpoint_switches([row for _, row, _ in rows])
     out, changed = [], 0
-    for line, row, double in _rows(raw, MISSION[2]):
+    gated = 0
+    for line, row, double in rows:
+        updated = dict(row)
         value = str(row.get("1x4bG2J8") or "")
         new = reward_overrides.first_clear(row.get("qo3PECw6"), value) if reward_overrides.for_mission(
             row.get("qo3PECw6")) else value
         if new != value:
-            line = _encrypt(MISSION[2], dict(row, **{"1x4bG2J8": new}), double)
+            updated["1x4bG2J8"] = new
             changed += 1
+        mission = str(row.get("qo3PECw6") or "")
+        extra = checkpoint_switches.get(mission) or []
+        if extra:
+            existing = [switch.strip() for switch in str(row.get("juA0Z4m7") or "").split(",")
+                        if switch.strip() not in ("", "0")]
+            requirements = list(dict.fromkeys(existing + extra))
+            joined = ",".join(requirements)
+            if joined != str(row.get("juA0Z4m7") or ""):
+                updated["juA0Z4m7"] = joined
+                gated += 1
+        if updated != row:
+            line = _encrypt(MISSION[2], updated, double)
         out.append(line)
-    return ("\n".join(out) + "\n").encode("ascii"), changed
+    return ("\n".join(out) + "\n").encode("ascii"), changed, gated
 
 
 def patch_unit_sell(raw: bytes) -> tuple[bytes, int]:
@@ -618,8 +698,9 @@ def serve(rel: str, *roots: str | None) -> tuple[bytes | None, str | None]:
             data, changed = patch_challenges(open(src, "rb").read())
             return data, f"{os.path.basename(src)}, {changed} challenge row(s) from the wiki"
         if spec == MISSION:
-            data, changed = patch_first_clears(open(src, "rb").read())
-            return data, f"{os.path.basename(src)}, {changed} first-clear reward(s) from the wiki"
+            data, first_clears, esper_gates = patch_mission_table(open(src, "rb").read())
+            return data, (f"{os.path.basename(src)}, {first_clears} first-clear reward(s) from the wiki, "
+                          f"{esper_gates} Esper quest(s) checkpoint-gated")
         if spec == UNIT:
             data, changed = patch_unit_sell(open(src, "rb").read())
             return data, f"{os.path.basename(src)}, {changed} story-unit row(s) given a sell price"
