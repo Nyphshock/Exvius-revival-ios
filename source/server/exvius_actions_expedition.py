@@ -1181,11 +1181,21 @@ def party_load(spec, req):
     return _out(_refresh(spec), **{"0wV1vDmK": [_slot_row(slot)]})
 
 
+def _expedition_guard(handler):
+    @wraps(handler)
+    def guarded(spec, req):
+        from ffbe_player import expedition_available
+        if not expedition_available(State.player):
+            return _refuse(spec, "expeditions are unavailable before the 2017-06-30 checkpoint")
+        return handler(spec, req)
+    return guarded
+
+
 HANDLERS = {
-    "hW0804Q9": expedition_info,
-    "Ik142Ff6": expedition_accelerate, "2pe3Xa8b": expedition_end,
-    "r4A791RF": milestone_claim, "vTgYyHM6": expedition_refresh,
-    "I8uq68c3": expedition_start, "0Fb87D0F": expedition_recall,
+    "hW0804Q9": _expedition_guard(expedition_info),
+    "Ik142Ff6": _expedition_guard(expedition_accelerate), "2pe3Xa8b": _expedition_guard(expedition_end),
+    "r4A791RF": _expedition_guard(milestone_claim), "vTgYyHM6": _expedition_guard(expedition_refresh),
+    "I8uq68c3": _expedition_guard(expedition_start), "0Fb87D0F": _expedition_guard(expedition_recall),
     "D9xphQ8X": challenge_clear, "nQMb2L4h": dungeon_liberation,
     "Tvq54dx6": mission_switch_update, "j5JHKq6S": mission_update,
     "G1hQM8Dr": mission_update,

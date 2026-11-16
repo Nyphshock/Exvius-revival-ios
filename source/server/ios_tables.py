@@ -288,7 +288,7 @@ def table_bump(spec, *roots) -> int:
         order = vortex_order.priorities()
         return 1000 + zlib.crc32(json.dumps(order, sort_keys=True).encode()) % 1000 if order else 0
     if spec in (FUNCTION, SWITCH):
-        return 1000
+        return 1001
     return 0
 
 
@@ -566,36 +566,43 @@ def patch_ability_explain(raw: bytes) -> tuple[bytes, int]:
 
 def patch_panel_function(raw: bytes) -> tuple[bytes, int]:
     from ffbe_config import PANEL_QUEST_UNLOCK_SWITCH
+    return _patch_feature_function(raw, "FUNCTION_PANEL_QUEST", PANEL_QUEST_UNLOCK_SWITCH)
+
+
+def _patch_feature_function(raw: bytes, function: str, switch: str) -> tuple[bytes, int]:
     out, changed, found = [], 0, 0
     for line, row, double in _rows(raw, FUNCTION[2]):
-        if row.get("G1nfeht7") == "FUNCTION_PANEL_QUEST":
+        if row.get("G1nfeht7") == function:
             found += 1
-            if row.get("juA0Z4m7") != PANEL_QUEST_UNLOCK_SWITCH:
-                line = _encrypt(FUNCTION[2], dict(row, juA0Z4m7=PANEL_QUEST_UNLOCK_SWITCH), double)
+            if row.get("juA0Z4m7") != switch:
+                line = _encrypt(FUNCTION[2], dict(row, juA0Z4m7=switch), double)
                 changed += 1
         out.append(line)
     if found != 1:
-        raise ValueError(f"Expected one Panel Quest function row, found {found}")
+        raise ValueError(f"Expected one {function} function row, found {found}")
     return ("\n".join(out) + "\n").encode("ascii"), changed
 
 
 def patch_panel_switch(raw: bytes) -> tuple[bytes, int]:
     from ffbe_config import PANEL_QUEST_UNLOCK_INDEX, PANEL_QUEST_UNLOCK_SWITCH
+    return _patch_feature_switch(raw, PANEL_QUEST_UNLOCK_SWITCH, PANEL_QUEST_UNLOCK_INDEX)
+
+
+def _patch_feature_switch(raw: bytes, switch: str, index: int) -> tuple[bytes, int]:
     rows = list(_rows(raw, SWITCH[2]))
     if not rows:
         raise ValueError("F_SWITCH_MST is empty")
     found = False
     for _, row, _ in rows:
-        same_id = str(row.get("8vAYn3IX")) == PANEL_QUEST_UNLOCK_SWITCH
-        same_bit = str(row.get("5opcUT9t")) == "101" and str(row.get("QLfe23bu")) == str(PANEL_QUEST_UNLOCK_INDEX)
+        same_id = str(row.get("8vAYn3IX")) == switch
+        same_bit = str(row.get("5opcUT9t")) == "101" and str(row.get("QLfe23bu")) == str(index)
         if same_id or same_bit:
             if not (same_id and same_bit) or found:
-                raise ValueError("Panel Quest switch ID or bit already belongs to another switch")
+                raise ValueError(f"Feature switch {switch} ID or bit already belongs to another switch")
             found = True
     if found:
         return raw, 0
-    added = {"8vAYn3IX": PANEL_QUEST_UNLOCK_SWITCH, "5opcUT9t": "101",
-             "QLfe23bu": str(PANEL_QUEST_UNLOCK_INDEX)}
+    added = {"8vAYn3IX": switch, "5opcUT9t": "101", "QLfe23bu": str(index)}
     out = [line for line, _, _ in rows] + [_encrypt(SWITCH[2], added, rows[0][2])]
     return ("\n".join(out) + "\n").encode("ascii"), 1
 
@@ -751,11 +758,16 @@ def serve(rel: str, *roots: str | None) -> tuple[bytes | None, str | None]:
             data, changed = patch_ability_explain(open(src, "rb").read())
             return data, f"{os.path.basename(src)}, {changed} restored ability description(s) in English"
         if spec == FUNCTION:
+            from ffbe_config import EXPEDITION_UNLOCK_SWITCH
             data, changed = patch_panel_function(open(src, "rb").read())
-            return data, f"{os.path.basename(src)}, {changed} Panel Quest unlock row(s) updated"
+            data, expedition_changed = _patch_feature_function(data, "FUNCTION_REEL_EXPEDITION",
+                                                                EXPEDITION_UNLOCK_SWITCH)
+            return data, f"{os.path.basename(src)}, {changed + expedition_changed} feature unlock row(s) updated"
         if spec == SWITCH:
+            from ffbe_config import EXPEDITION_UNLOCK_INDEX, EXPEDITION_UNLOCK_SWITCH
             data, changed = patch_panel_switch(open(src, "rb").read())
-            return data, f"{os.path.basename(src)}, {changed} Panel Quest switch row(s) added"
+            data, expedition_changed = _patch_feature_switch(data, EXPEDITION_UNLOCK_SWITCH, EXPEDITION_UNLOCK_INDEX)
+            return data, f"{os.path.basename(src)}, {changed + expedition_changed} feature switch row(s) added"
         if spec == MAP_EXT:
             if not farplane_scenes():
                 return open(src, "rb").read(), f"{os.path.basename(src)}, shipped rows (EXVIUS_FARPLANE_SCENES=0)"

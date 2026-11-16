@@ -2,6 +2,10 @@
 
 Each entry is one update to this repo. To update: in your repo folder run `git pull`, then from `ios-server` run `docker compose build && docker compose up -d`. Your save isn't touched. Open the game twice afterwards so it picks up the new data.
 
+## 2026-11-16: Expedition progression
+
+- Expeditions now unlock at their historical trial checkpoint.
+
 ## 2026-11-16: Panel Quest
 
 - Panel Quest unlocks after the Scorn of Tiamat checkpoint. Its friend-invite quest is completed automatically, with its reward still claimable once.

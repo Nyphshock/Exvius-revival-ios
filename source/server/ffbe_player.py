@@ -839,12 +839,17 @@ def serve_switches(spec, reply_id=None, is_battle_bundle=False, spec_key=None):
         c = _switch_container(spec, stype)
         if c is not None:
             wanted[stype] = c
-    panel_bits = list(wanted[SWITCH_TYPE_MISSION].ljust(PANEL_QUEST_UNLOCK_INDEX // 4 + 1, "0"))
-    offset, bit = divmod(PANEL_QUEST_UNLOCK_INDEX, 4)
-    nibble = int(panel_bits[offset], 16)
-    mask = 8 >> bit
-    panel_bits[offset] = format(nibble | mask if panel_quest_available(State.player) else nibble & ~mask, "x")
-    wanted[SWITCH_TYPE_MISSION] = "".join(panel_bits)
+    feature_bits = list(wanted[SWITCH_TYPE_MISSION].ljust(max(PANEL_QUEST_UNLOCK_INDEX,
+                                                               EXPEDITION_UNLOCK_INDEX) // 4 + 1, "0"))
+    expedition_open = (expedition_available(State.player)
+                       and EXPEDITION_ORIGINAL_INDEX in State.player.switches[SWITCH_TYPE_MISSION])
+    for index, available in ((PANEL_QUEST_UNLOCK_INDEX, panel_quest_available(State.player)),
+                             (EXPEDITION_UNLOCK_INDEX, expedition_open)):
+        offset, bit = divmod(index, 4)
+        nibble = int(feature_bits[offset], 16)
+        mask = 8 >> bit
+        feature_bits[offset] = format(nibble | mask if available else nibble & ~mask, "x")
+    wanted[SWITCH_TYPE_MISSION] = "".join(feature_bits)
     # Only groups that ALREADY carry switch rows may be rewritten or receive a synthesised type.
     switch_groups = [key for key, rows in spec.items()
                      if isinstance(rows, list)
@@ -2507,6 +2512,11 @@ _PQ: dict = {}
 def panel_quest_available(player) -> bool:
     from trial_progression import release_is_available
     return player is not None and release_is_available(player, PANEL_QUEST_RELEASE)
+
+
+def expedition_available(player) -> bool:
+    from trial_progression import release_is_available
+    return player is not None and release_is_available(player, EXPEDITION_RELEASE)
 
 
 def panel_quest_tables() -> dict:
