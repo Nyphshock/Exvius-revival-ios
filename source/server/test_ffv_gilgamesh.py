@@ -42,7 +42,7 @@ class FinalFantasyVBannerTests(unittest.TestCase):
 
                     expanded = player_state.summon_pool(banner)
                     gilgamesh = next(row for row in expanded if row['unit_id'] == GILGAMESH_FFV)
-                    self.assertAlmostEqual(gilgamesh['rate'], 0.01)
+                    self.assertAlmostEqual(gilgamesh['rate'], 0.03 * 1.75 / 2.75)
                     self.assertAlmostEqual(sum(row['rate'] for row in expanded), 1.0)
 
     def test_banner_loader_repairs_selected_ffv_alias(self):
