@@ -1404,7 +1404,8 @@ def expand_pool(banner: dict) -> list:
     return _only_named(out)
 
 
-_RATEUP_PROFILE = {3: (0.78, 0.25), 4: (0.19, 0.25), 5: (0.03, 1 / 3)}
+_RATEUP_PROFILE = {3: 0.78, 4: 0.19, 5: 0.03}
+_FEATURED_RATE_MULTIPLIER = 1.75
 _RARE_SUMMON_TEMPLATE = None
 
 
@@ -1434,23 +1435,19 @@ def apply_rateup_profile(banner: dict, pool: list) -> list:
         return pool
     out = copy.deepcopy(pool)
     featured_ids = _featured_family_ids(banner)
-    for rarity, (tier_rate, featured_share) in _RATEUP_PROFILE.items():
+    for rarity, tier_rate in _RATEUP_PROFILE.items():
         rows = [row for row in out if row.get('unit_id') is not None
                 and int(row.get('rarity') or (unit_mst(row['unit_id']) or {}).get('9fW0TePj') or 0) == rarity]
         if not rows:
             continue
         featured = [row for row in rows if str(row['unit_id']) in featured_ids]
         offbanner = [row for row in rows if str(row['unit_id']) not in featured_ids]
-        if featured and offbanner:
-            featured_total, offbanner_total = tier_rate * featured_share, tier_rate * (1 - featured_share)
-        elif featured:
-            featured_total, offbanner_total = tier_rate, 0.0
-        else:
-            featured_total, offbanner_total = 0.0, tier_rate
+        weight = len(featured) * _FEATURED_RATE_MULTIPLIER + len(offbanner)
+        unit_rate = tier_rate / weight
         for row in featured:
-            row['rate'] = featured_total / len(featured)
+            row['rate'] = unit_rate * _FEATURED_RATE_MULTIPLIER
         for row in offbanner:
-            row['rate'] = offbanner_total / len(offbanner)
+            row['rate'] = unit_rate
     return out
 
 

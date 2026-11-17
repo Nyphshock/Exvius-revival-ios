@@ -8,6 +8,7 @@ import unittest
 from unittest.mock import patch
 
 import ffbe_gacha
+import gacha_rates
 import player_state
 from ffbe_state import State
 
@@ -15,6 +16,54 @@ SERVER = Path(__file__).parent
 
 
 class RateUpProfileTests(unittest.TestCase):
+    def test_pre_nv_multi_guarantees_one_four_star_or_higher(self):
+        banner = {'id': '800070', 'release': '2016-11-11', 'provenance': 'community',
+                  'cost': {'kind': 'lapis', 'amount': 500}, 'draws': 1}
+        offer = ffbe_gacha.with_global_buttons(banner)['secondary_offer']
+        self.assertEqual(offer['guarantee'], {'rarity': 4, 'count': 1})
+        pool = [{'unit_id': 'unit-3', 'rarity': 3, 'rate': 0.78},
+                {'unit_id': 'unit-4', 'rarity': 4, 'rate': 0.19},
+                {'unit_id': 'unit-5', 'rarity': 5, 'rate': 0.03}]
+        candidates = player_state.summon_guarantee_pool(pool, offer['guarantee'], banner)
+        self.assertEqual([row['rarity'] for row in candidates], [4, 5])
+        text, tables = gacha_rates._guarantee_html(banner, pool, offer['guarantee'], 11, [])
+        self.assertIn('4★ or higher', text)
+        self.assertEqual([row['rarity'] for row in tables[0][1]], [4, 5])
+
+    def test_multi_preserves_specific_and_nv_guarantees(self):
+        banner = {'id': '800070', 'release': '2016-11-11', 'provenance': 'community',
+                  'cost': {'kind': 'lapis', 'amount': 500}, 'draws': 1,
+                  'guarantee': {'rarity': 5, 'count': 1}}
+        self.assertNotIn('guarantee', ffbe_gacha.with_global_buttons(banner)['secondary_offer'])
+        banner.pop('guarantee')
+        banner['release'] = '2020-08-20'
+        self.assertEqual(ffbe_gacha.with_global_buttons(banner)['secondary_offer']['guarantee'], {'rarity': 5})
+
+    def test_pre_nv_multi_roll_can_award_four_or_five_star_guarantee(self):
+        banner = ffbe_gacha.with_global_buttons({
+            'id': '800070', 'release': '2016-11-11', 'provenance': 'community', 'pool': [],
+            'cost': {'kind': 'lapis', 'amount': 500}, 'draws': 1,
+        })
+        pool = [{'unit_id': 'unit-3', 'rarity': 3, 'rate': 0.78},
+                {'unit_id': 'unit-4', 'rarity': 4, 'rate': 0.19},
+                {'unit_id': 'unit-5', 'rarity': 5, 'rate': 0.03}]
+        for guaranteed in (4, 5):
+            with self.subTest(guaranteed=guaranteed):
+                player = player_state.PlayerState({'gacha': {'step': {}}, 'roster': [],
+                                                   'inventory': {}, 'vision_cards': []})
+                with patch.object(player_state, 'summon_pool', return_value=pool), \
+                        patch.object(player_state, 'unit_mst', return_value={}), \
+                        patch.object(player_state, 'effect_pattern_for', return_value='0'), \
+                        patch.object(player, 'spend_currency', return_value=True), \
+                        patch.object(player, 'grant_unit', return_value={}), \
+                        patch('player_state.random.random', return_value=0), \
+                        patch('player_state.random.choices',
+                              side_effect=lambda candidates, weights: [next(
+                                  row for row in candidates if row['rarity'] == guaranteed)]):
+                    result = player.roll_gacha(banner, offer=banner['secondary_offer'])
+                self.assertEqual(len(result['awards']), 11)
+                self.assertEqual([row['granted_rarity'] for row in result['awards']], [3] * 10 + [guaranteed])
+
     def test_selected_banners_use_the_requested_rarity_and_featured_rates(self):
         banner = {
             'id': '9100004',
@@ -36,12 +85,12 @@ class RateUpProfileTests(unittest.TestCase):
             actual = player_state.summon_pool(banner)
 
         rates = {row['unit_id']: row['rate'] for row in actual}
-        self.assertAlmostEqual(rates['featured-3'], 0.195)
-        self.assertAlmostEqual(rates['off-3a'] + rates['off-3b'], 0.585)
-        self.assertAlmostEqual(rates['featured-4'], 0.0475)
-        self.assertAlmostEqual(rates['off-4'], 0.1425)
-        self.assertAlmostEqual(rates['featured-5'], 0.01)
-        self.assertAlmostEqual(rates['off-5'], 0.02)
+        self.assertAlmostEqual(rates['featured-3'], 0.78 * 1.75 / 3.75)
+        self.assertAlmostEqual(rates['off-3a'] + rates['off-3b'], 0.78 * 2 / 3.75)
+        self.assertAlmostEqual(rates['featured-4'], 0.19 * 1.75 / 2.75)
+        self.assertAlmostEqual(rates['off-4'], 0.19 / 2.75)
+        self.assertAlmostEqual(rates['featured-5'], 0.03 * 1.75 / 2.75)
+        self.assertAlmostEqual(rates['off-5'], 0.03 / 2.75)
         self.assertAlmostEqual(sum(rates.values()), 1.0)
 
     def test_unlisted_featured_banner_keeps_its_existing_pool_rates(self):
@@ -53,6 +102,30 @@ class RateUpProfileTests(unittest.TestCase):
 
         self.assertFalse(player_state.uses_rateup_profile(banner))
         self.assertEqual(actual, pool)
+
+    def test_elza_banner_counts_match_proposed_rates_and_page(self):
+        banner = {'release': '2016-11-11', 'pool': [], 'community': {'unit_ids': ['featured-5-0']}}
+        featured = {f'featured-4-{index}' for index in range(3)} | {
+            f'featured-5-{index}' for index in range(4)}
+        pool = ([{'unit_id': f'off-3-{index}', 'rarity': 3} for index in range(47)] +
+                [{'unit_id': f'featured-4-{index}', 'rarity': 4} for index in range(3)] +
+                [{'unit_id': f'off-4-{index}', 'rarity': 4} for index in range(9)] +
+                [{'unit_id': f'featured-5-{index}', 'rarity': 5} for index in range(4)] +
+                [{'unit_id': f'off-5-{index}', 'rarity': 5} for index in range(8)])
+        with patch.object(player_state, '_featured_family_ids', return_value=featured), \
+                patch.object(gacha_rates, '_name', side_effect=lambda row: row['unit_id']), \
+                patch('unit_art.enabled', return_value=False):
+            actual = player_state.apply_rateup_profile(banner, pool)
+            page = gacha_rates._pool_html(actual)
+        rates = {row['unit_id']: row['rate'] for row in actual}
+        self.assertAlmostEqual(rates['featured-5-0'], 0.0035)
+        self.assertAlmostEqual(rates['off-5-0'], 0.002)
+        self.assertAlmostEqual(rates['featured-4-0'], 0.19 * 1.75 / 14.25)
+        self.assertAlmostEqual(rates['off-4-0'], 0.19 / 14.25)
+        self.assertAlmostEqual(rates['off-3-0'], 0.78 / 47)
+        self.assertAlmostEqual(sum(rates.values()), 1.0)
+        self.assertIn('0.350%', page)
+        self.assertIn('0.200%', page)
 
     def test_unlisted_featured_banner_keeps_rateup_but_uses_rare_shared_pool(self):
         banner_pool = []
@@ -76,7 +149,7 @@ class RateUpProfileTests(unittest.TestCase):
         self.assertEqual({row['unit_id'] for row in actual},
                          {'featured', 'rare-shared-3', 'rare-shared-4', 'rare-shared-5'})
         rates = {row['unit_id']: row['rate'] for row in actual}
-        self.assertAlmostEqual(rates['featured'], 0.01)
+        self.assertAlmostEqual(rates['featured'], 0.03 * 1.75 / 2.75)
         self.assertAlmostEqual(sum(rates.values()), 1.0)
 
     def test_listed_featured_banner_uses_the_profile(self):
@@ -92,7 +165,7 @@ class RateUpProfileTests(unittest.TestCase):
         actual = player_state.apply_rateup_profile(banner, pool)
         rates = {row['unit_id']: row['rate'] for row in actual}
 
-        self.assertAlmostEqual(rates['featured-3'], 0.195)
+        self.assertAlmostEqual(rates['featured-3'], 0.78 * 1.75 / 2.75)
         self.assertAlmostEqual(rates['off-4'], 0.19)
         self.assertAlmostEqual(rates['off-5'], 0.03)
 
@@ -234,8 +307,8 @@ class RateUpProfileTests(unittest.TestCase):
         self.assertEqual({row['unit_id'] for row in actual},
                          {'featured-3', 'rare-shared-3', 'rare-shared-4', 'rare-shared-5'})
         rates = {row['unit_id']: row['rate'] for row in actual}
-        self.assertAlmostEqual(rates['featured-3'], 0.195)
-        self.assertAlmostEqual(rates['rare-shared-3'], 0.585)
+        self.assertAlmostEqual(rates['featured-3'], 0.78 * 1.75 / 2.75)
+        self.assertAlmostEqual(rates['rare-shared-3'], 0.78 / 2.75)
         self.assertAlmostEqual(rates['rare-shared-4'], 0.19)
         self.assertAlmostEqual(rates['rare-shared-5'], 0.03)
 
@@ -314,7 +387,7 @@ class RateUpProfileTests(unittest.TestCase):
         banners = [banner for banner in doc['banners']
                    if 9100000 <= int(banner['id']) <= 9100018]
         self.assertEqual(len(banners), 19)
-        expected = {3: (0.78, 0.195), 4: (0.19, 0.0475), 5: (0.03, 0.01)}
+        expected = {3: 0.78, 4: 0.19, 5: 0.03}
 
         for source in banners:
             banner = ffbe_gacha._ffv_gilgamesh_fix(source)
@@ -324,20 +397,22 @@ class RateUpProfileTests(unittest.TestCase):
             else:
                 pool = [{'unit_id': str(uid), 'rarity': tier['rarity'], 'rate': tier['rate']}
                         for tier in raw_pool['tiers'] for uid in (tier.get('units') or [])]
-            actual = player_state.apply_rateup_profile(banner, pool)
             featured_ids = set(map(str, (banner.get('community') or {}).get('unit_ids') or []))
             for tier in (raw_pool.get('tiers') or [] if isinstance(raw_pool, dict) else []):
                 featured_ids.update(map(str, tier.get('featured') or []))
+            with patch.object(player_state, '_featured_family_ids', return_value=featured_ids):
+                actual = player_state.apply_rateup_profile(banner, pool)
 
             with self.subTest(banner_id=banner['id'], name=banner['name']):
-                for rarity, (tier_total, featured_total) in expected.items():
+                for rarity, tier_total in expected.items():
                     rows = [row for row in actual if int(row.get('rarity') or 0) == rarity]
                     if not rows:
                         continue
                     self.assertAlmostEqual(sum(float(row['rate']) for row in rows), tier_total)
-                    featured = sum(float(row['rate']) for row in rows
-                                    if str(row['unit_id']) in featured_ids)
-                    self.assertAlmostEqual(featured, featured_total if featured else 0.0)
+                    featured = [row for row in rows if str(row['unit_id']) in featured_ids]
+                    offbanner = [row for row in rows if str(row['unit_id']) not in featured_ids]
+                    if featured and offbanner:
+                        self.assertAlmostEqual(featured[0]['rate'], offbanner[0]['rate'] * 1.75)
                 self.assertAlmostEqual(sum(float(row['rate']) for row in actual), 1.0)
 
 

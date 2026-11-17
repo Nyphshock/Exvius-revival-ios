@@ -459,8 +459,11 @@ def with_global_buttons(b: dict) -> dict:
             and not isinstance(b.get("cost"), list)):
         b["secondary_offer"] = {"cost": {"kind": "lapis", "amount": GACHA_MULTI_LAPIS}, "draws": 11,
                                 "exe_count": 1, "img_btn": "gacha_btns_gold_11"}
-        if b.get("provenance") == "community":
-            # The community art promises "a guaranteed 5★/NV unit with every 11 summon".
+        from player_state import _pre_nv_banner
+        pre_nv = _pre_nv_banner(b)
+        if pre_nv and not b.get('guarantee'):
+            b['secondary_offer']['guarantee'] = {'rarity': 4, 'count': 1}
+        elif not pre_nv and b.get("provenance") == "community":
             b["secondary_offer"]["guarantee"] = {"rarity": 5}
     return b
 def _gacha_cost_string(cost, draws: int = 1, item_id: int = 0) -> str:

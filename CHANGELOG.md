@@ -2,6 +2,11 @@
 
 Each entry is one update to this repo. To update: in your repo folder run `git pull`, then from `ios-server` run `docker compose build && docker compose up -d`. Your save isn't touched. Open the game twice afterwards so it picks up the new data.
 
+## 2026-11-17: Pre-NV featured rates
+
+- Pre-NV featured units now have 1.75 times the per-unit rate of off-banner units of the same rarity, while retaining the 3★, 4★ and 5★ rarity totals. Mixed reward pools and NV-era banners retain their own rates.
+- Automatically generated pre-NV 10+1 summons now guarantee one 4★ or higher unit instead of a 5★; explicitly defined guarantees remain unchanged.
+
 ## 2026-11-16: Exploration rewards, progression and summon rates
 
 - Vortex explorations now show and award catalogued collection points and map chests, including chests linked by map resource or dungeon when the mission record has no explicit association. Chests are credited after a boss victory.
