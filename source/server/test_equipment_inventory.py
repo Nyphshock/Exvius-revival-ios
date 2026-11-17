@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 import ffbe_state
 from exvius_actions import unit_equip
+from ffbe_player import apply_party_edit
 from player_state import PlayerState
 
 
@@ -66,6 +67,56 @@ class EquipmentInventoryTests(unittest.TestCase):
             row = player._equip_rows()[0]
             self.assertIn("1-403040200", row["93Y6evuT"])
             self.assertIn("1-200100001", row["80NUYFMJ"])
+
+    def test_party_edit_does_not_replace_pending_equipment(self):
+        groups = {
+            "5Eb0Rig6": [{"r21y0YzS": "0"}, {"r21y0YzS": "1"}],
+            "TJ9eL80N": [{"og2GHy49": "unit-1"}],
+            "DW7uH6Mn": [], "VE7KZ8CY": [], "wc8vSHPS": [],
+        }
+        with patch.object(self.player, "groups", return_value=groups):
+            reply = self.player.apply_to_reply({"5Eb0Rig6": []}, reply_id="TS5Dx9aZ")
+            refresh = self.player.apply_to_reply({"5Eb0Rig6": []}, reply_id="X07iYtp5")
+        self.assertEqual(reply["5Eb0Rig6"], groups["5Eb0Rig6"])
+        for tag in ("TJ9eL80N", "DW7uH6Mn", "VE7KZ8CY", "wc8vSHPS"):
+            self.assertNotIn(tag, reply)
+            self.assertIn(tag, refresh)
+
+    def test_moving_equipped_unit_between_decks_preserves_server_loadout(self):
+        unit = {"instance_id": "unit-1", "equipment": {str(slot): "0" for slot in range(1, 7)},
+                "materia": ["0"] * 4}
+        other = {"instance_id": "unit-2", "equipment": {}, "materia": ["0"] * 4}
+        player = PlayerState({
+            "identity": {"user_id": "300000001"},
+            "roster": [unit, other],
+            "inventory": {"equipment": [{"item_id": 403040200, "count": 1}], "items": []},
+            "progress": {"switches": {}, "cleared_challenges": {}, "paid_challenges": {}},
+            "vision_cards": [],
+            "party": {"active_deck": 0, "decks": [
+                {"id": 0, "name": "Team 1", "members": [
+                    {"member_type": 0, "disp_order": 0, "instance_id": "unit-1"}]},
+                {"id": 1, "name": "Team 2", "members": [
+                    {"member_type": 0, "disp_order": 0, "instance_id": "unit-2"}]},
+            ]},
+        })
+        equip_request = {"Er92Kdhm": [{"93Y6evuT": "unit-1:1-403040200"}]}
+        party_request = {"5Eb0Rig6": [{"r21y0YzS": "1", "2A6fYiEC": "0:0:unit-1,0:1:unit-2"}],
+                         "CN92arJK": [{"r21y0YzS": "1"}]}
+        with patch.object(ffbe_state.State, "player", player), \
+                patch("player_state._load_ndjson", return_value={"403040200": {}}), \
+                patch("ffbe_player.score_quest_action"):
+            unit_equip({}, equip_request)
+            apply_party_edit(json.dumps(party_request))
+            self.assertEqual(player.data["party"]["active_deck"], 1)
+            self.assertEqual(player.data["roster"][0]["equipment"]["1"], "403040200")
+            row = player._equip_rows()[0]
+            self.assertEqual(row["r21y0YzS"], "1")
+            self.assertIn("1-403040200", row["93Y6evuT"])
+            with tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / "player.json"
+                self.assertTrue(player.save(str(path)))
+                saved = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(saved["roster"][0]["equipment"]["1"], "403040200")
 
 
 if __name__ == "__main__":

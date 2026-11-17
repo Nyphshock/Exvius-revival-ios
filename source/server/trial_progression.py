@@ -44,6 +44,7 @@ CHECKPOINTS = (
     (date(2023, 7, 13), frozenset(('90010201',))),
     (date(2024, 8, 22), frozenset(('9630703',))),
 )
+CHECKPOINT_LAPIS_BONUS = 50000
 FINAL_CONTENT_DATE = date(2024, 10, 30)
 
 # Last main-story mission available while the Trial checkpoint at each date is pending.
@@ -221,6 +222,14 @@ def _cleared_missions(player) -> set[str]:
     data = getattr(player, 'data', None) or {}
     progress = data.get('progress') or {}
     return {str(mission) for mission in progress.get('cleared_missions') or []}
+
+
+def newly_completed_checkpoints(cleared_before, cleared_after) -> tuple[date, ...]:
+    """Checkpoint dates whose complete trial group became cleared in this transition."""
+    before = {str(mission) for mission in cleared_before}
+    after = {str(mission) for mission in cleared_after}
+    return tuple(day for day, missions in CHECKPOINTS
+                 if not missions.issubset(before) and missions.issubset(after))
 
 
 def next_checkpoint_date(player) -> date | None:

@@ -472,6 +472,8 @@ PIPELINE_EDGES: tuple = (
          "mission clear Gil is part of the balance the team-currency group reports"),
     Edge("grant_cleared_mission", "serve_switches", "State.player.switches",
          "a mission's own open switch is granted here and the container is rebuilt from state after"),
+    Edge("grant_cleared_mission", "serve_diamonds", "State.player.currencies",
+         "a newly cleared Trial checkpoint credits Lapis before the balance is projected"),
     Edge("grant_cleared_mission", "grant_story_units", "State.player.progress.cleared_missions",
          "a story unit joins on the clear this request just recorded"),
     Edge("grant_story_units", "apply_to_reply", "State.player.roster",

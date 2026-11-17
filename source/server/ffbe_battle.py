@@ -1352,8 +1352,23 @@ def grant_cleared_mission(spec, mid: str | None, plaintext: str | None = None):
             score_quest_action('46')
             State.state_dirty = True
             print(f"    beast: mission {mid} cleared -> awakened esper {awakening} to R{next_rarity}", flush=True)
+    cleared_before = set(State.player.data.get('progress', {}).get('cleared_missions') or [])
     had = set(State.player.switches.get(SWITCH_TYPE_MISSION, set()))
     sw = State.player.clear_mission(mid)
+    from trial_progression import CHECKPOINT_LAPIS_BONUS, newly_completed_checkpoints
+    cleared_after = set(State.player.data.get('progress', {}).get('cleared_missions') or [])
+    checkpoints = newly_completed_checkpoints(cleared_before, cleared_after)
+    if checkpoints:
+        bonus = CHECKPOINT_LAPIS_BONUS * len(checkpoints)
+        State.player.add_currency('lapis_free', bonus)
+        State.state_dirty = True
+        from exvius_rewards import reward_text
+        bonus_text = reward_text([{'kind': 50, 'id': 1, 'count': bonus}])
+        for row in spec.get(RESULT_TAG, []):
+            if isinstance(row, dict):
+                row['p1K5NecV'] = ','.join(filter(None, (str(row.get('p1K5NecV') or ''), bonus_text)))
+        print(f"    checkpoint: {','.join(day.isoformat() for day in checkpoints)} cleared -> "
+              f"+{bonus} lapis", flush=True)
     if sw is None:
         if mission_open_switch(mid):
             _note(f"grant_cleared_mission: mission {mid} granted no type-{SWITCH_TYPE_MISSION} switch "

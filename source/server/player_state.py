@@ -5191,6 +5191,9 @@ class PlayerState:
         the old deck there destroys a pending party-editor replacement before the following
         `PartyDeckEditRequest` is serialized. The actual party edit and full login/user-state refreshes
         still receive the current `5Eb0Rig6` projection.
+
+        Conversely, `PartyDeckEditRequest` (`TS5Dx9aZ`) must not replace the equipment lists: the client
+        may send a subsequent `UnitEquipRequest` containing equipment edits made in the same editor.
         """
         if not isinstance(spec, dict):
             return spec
@@ -5250,6 +5253,9 @@ class PlayerState:
             out[tag] = rows
         if str(reply_id) == "pB3st6Tg":
             for tag in ('5Eb0Rig6', 'fqTUI1z6', 'GV7Ej6n0', 'zeucwm6H'):
+                out.pop(tag, None)
+        elif str(reply_id) == "TS5Dx9aZ":
+            for tag in ('TJ9eL80N', 'DW7uH6Mn', 'VE7KZ8CY', 'wc8vSHPS'):
                 out.pop(tag, None)
         return out
 

@@ -5,7 +5,8 @@ from unittest.mock import patch
 
 from trial_progression import (CHECKPOINTS, active_checkpoint_missions, next_checkpoint_date,
                                release_is_available, mission_is_within_story_limit,
-                               story_limit_for_checkpoint, story_mission_is_available,
+                               newly_completed_checkpoints, story_limit_for_checkpoint,
+                               story_mission_is_available,
                                checkpoint_mission_is_available, _resolve_story_limit)
 
 
@@ -34,6 +35,15 @@ class TrialProgressionTests(unittest.TestCase):
         self.assertEqual(next_checkpoint_date(player), date(2019, 3, 21))
         player.data['progress']['cleared_missions'].append('8993501')
         self.assertEqual(next_checkpoint_date(player), date(2019, 4, 11))
+
+    def test_checkpoint_transition_pays_only_when_the_full_group_clears(self):
+        day, missions = next((day, missions) for day, missions in CHECKPOINTS if len(missions) > 1)
+        before = {mission for checkpoint, group in CHECKPOINTS if checkpoint < day for mission in group}
+        before.update(set(missions) - {next(iter(missions))})
+        after = before | set(missions)
+
+        self.assertEqual(newly_completed_checkpoints(before, after), (day,))
+        self.assertEqual(newly_completed_checkpoints(after, after), ())
 
     def test_completed_timeline_stops_at_global_closure(self):
         cleared = [mission for _day, missions in CHECKPOINTS for mission in missions]

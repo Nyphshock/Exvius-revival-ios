@@ -2,6 +2,11 @@
 
 Each entry is one update to this repo. To update: in your repo folder run `git pull`, then from `ios-server` run `docker compose build && docker compose up -d`. Your save isn't touched. Open the game twice afterwards so it picks up the new data.
 
+## 2026-11-17: Trial checkpoint rewards and party equipment
+
+- Clearing a Trial checkpoint now awards 50,000 Lapis once, after all trials in that checkpoint group are cleared. Previously completed checkpoints are not paid retroactively.
+- Party deck edits no longer replace equipment and materia lists before loadout changes are sent, preserving a unit's existing equipment when it is added to another deck.
+
 ## 2026-11-17: Pre-NV featured rates
 
 - Pre-NV featured units now have 1.75 times the per-unit rate of off-banner units of the same rarity, while retaining the 3★, 4★ and 5★ rarity totals. Mixed reward pools and NV-era banners retain their own rates.
