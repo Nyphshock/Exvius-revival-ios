@@ -14,6 +14,7 @@ from exvius_raid_progress import personal_raid_menu
 from ffbe_state import State, _note
 
 UNIT_GROUP = "B71MekS8"        # UserUnitInfoResponse; its presence makes apply_to_reply project all groups
+_DECK_LOADOUT_FIELDS = ("93Y6evuT", "80NUYFMJ", "w1JG7i9j", "2c8nqLrM", "nQ1iAGf3")
 
 
 def _request(plaintext):
@@ -34,6 +35,25 @@ def _node(req, group):
 def _refresh(spec):
     out = dict(spec) if isinstance(spec, dict) else {}
     out.setdefault(UNIT_GROUP, [])
+    return out
+
+
+def _active_deck_loadout(row, active_deck):
+    deck_ids = [part.strip() for part in str(row.get("r21y0YzS") or "").split(";")]
+    if len(deck_ids) < 2:
+        return row
+    try:
+        selected = deck_ids.index(str(active_deck))
+    except ValueError:
+        return None
+    out = dict(row)
+    out["r21y0YzS"] = deck_ids[selected]
+    for field in _DECK_LOADOUT_FIELDS:
+        if field not in row:
+            continue
+        values = str(row[field] or "").split(";")
+        if len(values) == len(deck_ids):
+            out[field] = values[selected]
     return out
 
 
@@ -140,6 +160,9 @@ def unit_equip(spec, req):
     loadouts = {}
     try:
         for row in rows:
+            row = _active_deck_loadout(row, player.data.get("party", {}).get("active_deck", 0))
+            if row is None:
+                continue
             decoded, _ = _wire_loadouts(row, roster, ignore_unknown=True)
             for iid, fields in decoded.items():
                 for field, values in fields.items():

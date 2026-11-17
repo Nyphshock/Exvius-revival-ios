@@ -149,6 +149,28 @@ class EquipmentInventoryTests(unittest.TestCase):
 
         self.assertEqual(player.data["roster"][0]["equipment"]["1"], "0")
 
+    def test_unit_equip_uses_active_deck_loadout_when_duplicate_rows_disagree(self):
+        player = PlayerState({
+            "identity": {"user_id": "300000001"},
+            "roster": [{"instance_id": "unit-1", "equipment": {"1": "403040200"},
+                        "materia": ["0"] * 4}],
+            "inventory": {"equipment": [
+                {"item_id": 403040200, "count": 1}, {"item_id": 403040300, "count": 1}],
+                "items": []},
+            "party": {"active_deck": 1, "decks": []},
+        })
+        request = {"Er92Kdhm": [{
+            "r21y0YzS": "1;0",
+            "93Y6evuT": "unit-1:1-403040300@2-0@3-0@4-0@5-0@6-0;"
+                         "unit-1:1-403040200@2-0@3-0@4-0@5-0@6-0",
+        }]}
+
+        with patch.object(ffbe_state.State, "player", player), \
+                patch("player_state._load_ndjson", return_value={"403040200": {}, "403040300": {}}):
+            unit_equip({}, request)
+
+        self.assertEqual(player.data["roster"][0]["equipment"]["1"], "403040300")
+
 
 if __name__ == "__main__":
     unittest.main()
