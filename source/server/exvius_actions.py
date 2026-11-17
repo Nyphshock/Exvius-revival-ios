@@ -8,6 +8,7 @@ refresh the client's lists carries the unit group, so `apply_to_reply` projects 
 """
 from collections import Counter
 import json
+import time
 from exvius_raid_progress import personal_raid_menu
 
 from ffbe_state import State, _note
@@ -125,7 +126,8 @@ def _parse_rewards(text):
 
 
 def unit_equip(spec, req):
-    from exvius_actions_expedition import _retain_owned_equipment, _wire_loadouts
+    from exvius_actions_expedition import (_loadout_is_empty, _retain_owned_equipment,
+                                          _wire_loadouts)
 
     player = State.player
     rows = req.get("Er92Kdhm")
@@ -153,6 +155,20 @@ def unit_equip(spec, req):
     except (AttributeError, TypeError, ValueError):
         _note("unit-equip: invalid equipment update")
         return _refresh(spec)
+    guard = getattr(player, "_party_equip_guard", None)
+    player._party_equip_guard = None
+    restored = 0
+    if guard and time.monotonic() - guard[0] <= 5:
+        for iid, fields in loadouts.items():
+            previous = guard[1].get(iid) or {}
+            for field, values in fields.items():
+                saved = previous.get(field)
+                if saved is not None and _loadout_is_empty(values) and not _loadout_is_empty(saved):
+                    fields[field] = saved
+                    restored += 1
+    if restored:
+        print(f"unit-equip: preserved {restored} empty field(s) from the immediately preceding party edit",
+              flush=True)
     if any(any(roster[iid].get(key) != value for key, value in fields.items())
            for iid, fields in loadouts.items()):
         # Older saves infer the starter copies from the worn slots. Keep those

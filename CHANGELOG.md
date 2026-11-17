@@ -5,7 +5,7 @@ Each entry is one update to this repo. To update: in your repo folder run `git p
 ## 2026-11-17: Trial checkpoint rewards and party equipment
 
 - Clearing a Trial checkpoint now awards 50,000 Lapis once, after all trials in that checkpoint group are cleared. Previously completed checkpoints are not paid retroactively.
-- Party deck edits project each unit's globally stored equipment under the newly active deck, so the same unit keeps its loadout when added to another team.
+- Party deck edits project each unit's globally stored equipment under the newly active deck; an immediate empty equipment echo no longer clears that loadout.
 
 ## 2026-11-17: Pre-NV featured rates
 

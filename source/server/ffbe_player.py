@@ -436,6 +436,21 @@ def apply_party_edit(plaintext: str | None) -> None:
         reason = f"unknown unit id(s) {','.join(dropped)}" if dropped else "malformed/duplicate slot data"
         _note(f"apply_party_edit: rejected deck row(s) {','.join(rejected_decks)} ({reason}); "
               "no partial deck was applied")
+    active = next((deck for deck in party.get('decks') or []
+                   if str(deck.get('id')) == str(party.get('active_deck'))), None)
+    active_ids = {str(member.get('instance_id')) for member in (active or {}).get('members') or []}
+    from exvius_actions_expedition import _loadout_is_empty
+    loadouts = {}
+    for unit in state.get('roster') or []:
+        iid = str(unit.get('instance_id'))
+        if iid not in active_ids:
+            continue
+        fields = ('equipment', 'shift_equipment', 'materia', 'shift_materia',
+                  'vision_card', 'shift_vision_card')
+        saved = {field: copy.deepcopy(unit[field]) for field in fields if field in unit}
+        if any(not _loadout_is_empty(value) for value in saved.values()):
+            loadouts[iid] = saved
+    State.player._party_equip_guard = (time.monotonic(), loadouts) if loadouts else None
     if changed:
         State.player.dirty = True
         print(f"party: edit applied to {','.join(changed)}", flush=True)

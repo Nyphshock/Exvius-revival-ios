@@ -113,6 +113,9 @@ class EquipmentInventoryTests(unittest.TestCase):
             apply_party_edit(json.dumps(party_request))
             self.assertEqual(player.data["party"]["active_deck"], 1)
             self.assertEqual(player.data["roster"][0]["equipment"]["1"], "403040200")
+            empty_equip_request = {"Er92Kdhm": [{"93Y6evuT": "unit-1:1-0@2-0@3-0@4-0@5-0@6-0"}]}
+            unit_equip({}, empty_equip_request)
+            self.assertEqual(player.data["roster"][0]["equipment"]["1"], "403040200")
             groups = {"5Eb0Rig6": player._deck_rows(), "TJ9eL80N": player._equip_rows(),
                       "DW7uH6Mn": [], "VE7KZ8CY": [], "wc8vSHPS": []}
             with patch.object(player, "groups", return_value=groups):
@@ -130,6 +133,19 @@ class EquipmentInventoryTests(unittest.TestCase):
                 self.assertTrue(player.save(str(path)))
                 saved = json.loads(path.read_text(encoding="utf-8"))
             self.assertEqual(saved["roster"][0]["equipment"]["1"], "403040200")
+
+    def test_explicit_unequip_without_party_edit_still_clears_loadout(self):
+        player = PlayerState({
+            "identity": {"user_id": "300000001"},
+            "roster": [{"instance_id": "unit-1", "equipment": {"1": "403040200"},
+                        "materia": ["0"] * 4}],
+            "inventory": {"equipment": [{"item_id": 403040200, "count": 1}], "items": []},
+        })
+        with patch.object(ffbe_state.State, "player", player), \
+                patch("player_state._load_ndjson", return_value={"403040200": {}}):
+            unit_equip({}, {"Er92Kdhm": [{"93Y6evuT": "unit-1:1-0@2-0@3-0@4-0@5-0@6-0"}]})
+
+        self.assertEqual(player.data["roster"][0]["equipment"]["1"], "0")
 
 
 if __name__ == "__main__":

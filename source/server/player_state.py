@@ -2447,6 +2447,7 @@ class PlayerState:
         self.data = data
         self.mode = mode
         self.dirty = False
+        self._party_equip_guard = None
         # An overlay is a TEST knob (schema §1.3): applied in memory, and the ordinary autosave must NOT
         # bake it into a slot. `_overlay_undo` remembers each touched path's pre-overlay value so `save()`
         # can write the canonical base back out; `force` (`--state-save`) is the one way to KEEP an

@@ -985,6 +985,16 @@ def _wire_entries(value):
     return filter(None, re.split(r'[;,]', str(value or '')))
 
 
+def _loadout_is_empty(value):
+    if isinstance(value, dict):
+        values = value.values()
+    elif isinstance(value, (list, tuple)):
+        values = value
+    else:
+        values = (value,)
+    return all(item in (None, '', 0, '0') for item in values)
+
+
 def _wire_loadouts(slot, members, slots=5, ignore_unknown=False):
     """Decode the original save-slot strings, including both unit forms."""
     loadouts = {}
