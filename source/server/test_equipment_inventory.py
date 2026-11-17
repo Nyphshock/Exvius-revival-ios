@@ -68,18 +68,22 @@ class EquipmentInventoryTests(unittest.TestCase):
             self.assertIn("1-403040200", row["93Y6evuT"])
             self.assertIn("1-200100001", row["80NUYFMJ"])
 
-    def test_party_edit_does_not_replace_pending_equipment(self):
+    def test_party_edit_projects_global_equipment_for_the_active_deck(self):
         groups = {
             "5Eb0Rig6": [{"r21y0YzS": "0"}, {"r21y0YzS": "1"}],
-            "TJ9eL80N": [{"og2GHy49": "unit-1"}],
+            "TJ9eL80N": [{"og2GHy49": "unit-1", "r21y0YzS": "1",
+                           "93Y6evuT": "1-403040200"}],
             "DW7uH6Mn": [], "VE7KZ8CY": [], "wc8vSHPS": [],
         }
         with patch.object(self.player, "groups", return_value=groups):
             reply = self.player.apply_to_reply({"5Eb0Rig6": []}, reply_id="TS5Dx9aZ")
             refresh = self.player.apply_to_reply({"5Eb0Rig6": []}, reply_id="X07iYtp5")
         self.assertEqual(reply["5Eb0Rig6"], groups["5Eb0Rig6"])
-        for tag in ("TJ9eL80N", "DW7uH6Mn", "VE7KZ8CY", "wc8vSHPS"):
-            self.assertNotIn(tag, reply)
+        self.assertEqual(reply["TJ9eL80N"], groups["TJ9eL80N"])
+        self.assertEqual(reply["TJ9eL80N"][0]["r21y0YzS"], "1")
+        self.assertIn("1-403040200", reply["TJ9eL80N"][0]["93Y6evuT"])
+        for tag in ("DW7uH6Mn", "VE7KZ8CY", "wc8vSHPS"):
+            self.assertIn(tag, reply)
             self.assertIn(tag, refresh)
 
     def test_moving_equipped_unit_between_decks_preserves_server_loadout(self):
@@ -108,6 +112,15 @@ class EquipmentInventoryTests(unittest.TestCase):
             unit_equip({}, equip_request)
             apply_party_edit(json.dumps(party_request))
             self.assertEqual(player.data["party"]["active_deck"], 1)
+            self.assertEqual(player.data["roster"][0]["equipment"]["1"], "403040200")
+            groups = {"5Eb0Rig6": player._deck_rows(), "TJ9eL80N": player._equip_rows(),
+                      "DW7uH6Mn": [], "VE7KZ8CY": [], "wc8vSHPS": []}
+            with patch.object(player, "groups", return_value=groups):
+                reply = player.apply_to_reply({"5Eb0Rig6": []}, reply_id="TS5Dx9aZ")
+            projected = next(row for row in reply["TJ9eL80N"] if row["og2GHy49"] == "unit-1")
+            self.assertEqual(projected["r21y0YzS"], "1")
+            self.assertIn("1-403040200", projected["93Y6evuT"])
+            unit_equip({}, {"Er92Kdhm": [{"93Y6evuT": f"unit-1:{projected['93Y6evuT']}"}]})
             self.assertEqual(player.data["roster"][0]["equipment"]["1"], "403040200")
             row = player._equip_rows()[0]
             self.assertEqual(row["r21y0YzS"], "1")
