@@ -38,7 +38,7 @@ class MissionTableEsperGateTests(unittest.TestCase):
         self.assertEqual(patched["2000201"]["juA0Z4m7"], "90001154")
         self.assertEqual(patched["2000101"]["juA0Z4m7"], "0")
         self.assertEqual(patched["4000101"]["juA0Z4m7"], "0")
-        self.assertEqual(patched["9000406"]["uv60hgDW"], "99999999")
+        self.assertEqual(patched["9000406"]["uv60hgDW"], "9061")
         self.assertEqual(patched["other-906-mission"]["uv60hgDW"], "906")
         self.assertEqual(rows[0]["juA0Z4m7"], "82001210")
 
@@ -54,7 +54,7 @@ class MissionTableEsperGateTests(unittest.TestCase):
         with patch.object(ios_tables, "_rows", return_value=parsed), \
                 patch.object(ios_tables, "_encrypt",
                              side_effect=lambda _key, row, _double: json.dumps(row)), \
-                patch("vortex_order.priorities", return_value={"906": "100", "99999999": "100"}), \
+                patch("vortex_order.priorities", return_value={"906": "100", "9061": "100"}), \
                 patch("player_state._load_ndjson", return_value={
                     "90006": {"U9iHsau3": "90006", "0HUPxDf1": "9000006"}}), \
                 patch("event_archive.events", return_value=[{
@@ -65,16 +65,16 @@ class MissionTableEsperGateTests(unittest.TestCase):
         self.assertEqual(added, 2)
         self.assertEqual(served["906"]["0HUPxDf1"], "2110002")
         self.assertEqual(served["906"]["RB8zTc9G"], "1,9001,62,55:23")
-        self.assertEqual(served["99999999"]["G4L0YIB2"], "Dread Frost Arrives")
-        self.assertEqual(served["99999999"]["0HUPxDf1"], "9000006")
-        self.assertEqual(served["99999999"]["RB8zTc9G"], "")
+        self.assertEqual(served["9061"]["G4L0YIB2"], "Dread Frost Arrives")
+        self.assertEqual(served["9061"]["0HUPxDf1"], "9000006")
+        self.assertEqual(served["9061"]["RB8zTc9G"], "")
         from event_archive import client_gate_row
         self.assertEqual(client_gate_row({"uv60hgDW": "906", "U9iHsau3": "90006"}),
-                 {"uv60hgDW": "99999999", "U9iHsau3": "90006"})
+                 {"uv60hgDW": "9061", "U9iHsau3": "90006"})
         self.assertEqual(client_gate_row({"uv60hgDW": "899"}), {"uv60hgDW": "899"})
 
     def test_area_alias_changes_force_client_table_refetch(self):
-        with patch("vortex_order.priorities", return_value={"906": "100", "99999999": "100"}):
+        with patch("vortex_order.priorities", return_value={"906": "100", "9061": "100"}):
             self.assertGreaterEqual(ios_tables.table_bump(ios_tables.AREA), 2000)
         with patch("reward_overrides.enabled", return_value=False):
             self.assertGreaterEqual(ios_tables.table_bump(ios_tables.MISSION), 4000)

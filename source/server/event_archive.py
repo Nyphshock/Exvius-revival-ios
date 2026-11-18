@@ -22,7 +22,7 @@ REPLAY_LOOKBACK_DAYS = 14   # first replay week: events still running when the r
 
 # Area 906 is also the client's Book of Memories entry. Keep that native destination intact and give
 # Dread Frost Arrives a separate client-side area ID so its Vortex gate opens the event missions.
-CLIENT_AREA_ALIASES = {'906': '99999999'}
+CLIENT_AREA_ALIASES = {'906': '9061'}
 CLIENT_AREA_ALIAS_TEMPLATES = {'906': '899'}
 CLIENT_AREA_ALIAS_MISSIONS = {'906': ('9000406', '9000407', '9000408')}
 
