@@ -8,7 +8,6 @@ refresh the client's lists carries the unit group, so `apply_to_reply` projects 
 """
 from collections import Counter
 import json
-import time
 from exvius_raid_progress import personal_raid_menu
 
 from ffbe_state import State, _note
@@ -53,6 +52,31 @@ def _deck_loadout_rows(row):
                 candidate[field] = values[index]
         out.append((deck_id, candidate))
     return out
+
+
+def _merge_loadout_field(stored, copies, active_deck):
+    """Fold each deck's copy of one loadout field into the unit's single stored value.
+
+    A copy the player did not touch still holds the stored value, so only what differs from it is an edit;
+    slot by slot, so edits made under two teams in one visit are both kept. The active deck wins a tie."""
+    ordered = sorted(copies, key=lambda copy: copy[0] == active_deck)
+    sample = ordered[0][1]
+    if isinstance(sample, dict):
+        old = {str(slot): str(item) for slot, item in (stored or {}).items()}
+        merged = {slot: old.get(slot, "0") for slot in sample}
+        for _deck, value in ordered:
+            merged.update({slot: item for slot, item in value.items() if item != old.get(slot, "0")})
+        return merged
+    if isinstance(sample, list):
+        old = ([str(item) for item in (stored or [])] + ["0"] * len(sample))[:len(sample)]
+        merged = list(old)
+        for _deck, value in ordered:
+            for index, item in enumerate(value):
+                if item != old[index]:
+                    merged[index] = item
+        return merged
+    edits = [value for _deck, value in ordered if value != stored]
+    return edits[-1] if edits else stored
 
 
 def _mst(name, key):
@@ -144,8 +168,7 @@ def _parse_rewards(text):
 
 
 def unit_equip(spec, req):
-    from exvius_actions_expedition import (_loadout_is_empty, _retain_owned_equipment,
-                                          _wire_loadouts)
+    from exvius_actions_expedition import _retain_owned_equipment, _wire_loadouts
 
     player = State.player
     rows = req.get("Er92Kdhm")
@@ -168,19 +191,9 @@ def unit_equip(spec, req):
     active_deck = str(player.data.get("party", {}).get("active_deck", 0))
     loadouts = {}
     for iid, versions in candidates.items():
-        current = roster[iid]
-        fields = {field for _deck_id, version in versions for field in version}
-        for field in fields:
-            changed = [(deck_id, version[field]) for deck_id, version in versions
-                       if field in version and version[field] != current.get(field)]
-            if not changed:
-                continue
-            distinct = []
-            for deck_id, value in changed:
-                if value not in [known for _known_deck, known in distinct]:
-                    distinct.append((deck_id, value))
-            active = [entry for entry in distinct if entry[0] == active_deck]
-            loadouts.setdefault(iid, {})[field] = (active or distinct)[-1][1]
+        for field in {field for _deck_id, version in versions for field in version}:
+            copies = [(deck_id, version[field]) for deck_id, version in versions if field in version]
+            loadouts.setdefault(iid, {})[field] = _merge_loadout_field(roster[iid].get(field), copies, active_deck)
     try:
         for iid, fields in loadouts.items():
             for field, values in fields.items():
@@ -194,22 +207,9 @@ def unit_equip(spec, req):
     except (AttributeError, TypeError, ValueError):
         _note("unit-equip: invalid global equipment update")
         return _refresh(spec)
-    guard = getattr(player, "_party_equip_guard", None)
-    player._party_equip_guard = None
-    restored = 0
-    if guard and time.monotonic() - guard[0] <= 5:
-        for iid, fields in loadouts.items():
-            previous = guard[1].get(iid) or {}
-            for field, values in fields.items():
-                saved = previous.get(field)
-                if saved is not None and _loadout_is_empty(values) and not _loadout_is_empty(saved):
-                    fields[field] = saved
-                    restored += 1
-    if restored:
-        print(f"unit-equip: preserved {restored} empty field(s) from the immediately preceding party edit",
-              flush=True)
-    if any(any(roster[iid].get(key) != value for key, value in fields.items())
-           for iid, fields in loadouts.items()):
+    changed = sorted(iid for iid, fields in loadouts.items()
+                     if any(roster[iid].get(key) != value for key, value in fields.items()))
+    if changed:
         # Older saves infer the starter copies from the worn slots. Keep those
         # copies in inventory before replacing or clearing the slots.
         _retain_owned_equipment()
@@ -220,6 +220,9 @@ def unit_equip(spec, req):
                     score_quest_action('13')
             roster[iid].update(fields)
         player.dirty = True
+        decks = sorted({deck_id for versions in candidates.values() for deck_id, _fields in versions})
+        print(f"unit-equip: stored loadout changed for {','.join(changed)} (deck copies sent: "
+              f"{','.join(decks) or '-'})", flush=True)
     return _refresh(spec)
 
 

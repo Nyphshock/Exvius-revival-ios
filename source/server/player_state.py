@@ -2447,7 +2447,6 @@ class PlayerState:
         self.data = data
         self.mode = mode
         self.dirty = False
-        self._party_equip_guard = None
         # An overlay is a TEST knob (schema §1.3): applied in memory, and the ordinary autosave must NOT
         # bake it into a slot. `_overlay_undo` remembers each touched path's pre-overlay value so `save()`
         # can write the canonical base back out; `force` (`--state-save`) is the one way to KEEP an
@@ -5193,8 +5192,11 @@ class PlayerState:
         `PartyDeckEditRequest` is serialized. The actual party edit and full login/user-state refreshes
         still receive the current `5Eb0Rig6` projection.
 
-        `PartyDeckEditRequest` changes the active deck, so return the globally owned equipment under that
-        deck id. Equipment belongs to the unit instance, not a party deck.
+        The same holds the other way round. When the player switches team in the party editor the client sends
+        `PartyDeckEditRequest` (`TS5Dx9aZ`) BEFORE `UnitEquipRequest`, and the equipment lists are
+        clear-and-rebuild too: carrying them in that reply replaced the client's unsent equipment edits with
+        the stored loadout, so the `UnitEquipRequest` that followed only echoed it back (11 of 11 such chains
+        recorded on 2026-11-17, e.g. a third item shown on the phone and gone from the request a second later).
         """
         if not isinstance(spec, dict):
             return spec
@@ -5254,6 +5256,9 @@ class PlayerState:
             out[tag] = rows
         if str(reply_id) == "pB3st6Tg":
             for tag in ('5Eb0Rig6', 'fqTUI1z6', 'GV7Ej6n0', 'zeucwm6H'):
+                out.pop(tag, None)
+        elif str(reply_id) == "TS5Dx9aZ":
+            for tag in ('TJ9eL80N', 'DW7uH6Mn', 'VE7KZ8CY', 'wc8vSHPS'):
                 out.pop(tag, None)
         return out
 
@@ -5359,16 +5364,20 @@ class PlayerState:
                 tags[2]: self._beast_deck_rows(party)}
 
     def _equip_rows(self, party=None) -> list:
-        """Project one shared unit loadout under every party deck containing its instance."""
+        """The unit's one stored loadout, repeated for every deck.
+
+        The client keeps a separate copy per (deck, unit) and looks it up under the deck on screen (the Units
+        menu uses the active deck). A unit with no row for that deck is shown bare and then SENT bare, which
+        cleared its stored equipment (recorded 2026-11-17: Elza added to a second team, and again when she
+        was opened under a team her row was not labelled with). So an equipped unit gets a row for every deck,
+        whether or not it is a member; a bare unit needs only one, because a missing copy is bare as well.
+        """
         party = self.data['party'] if party is None else party
+        active = str(party["active_deck"])
+        every_deck = [str(deck["id"]) for deck in party["decks"]] or [active]
         rows = []
         for u in self.data["roster"]:
             iid = str(u["instance_id"])
-            deck_ids = [str(deck["id"]) for deck in party["decks"]
-                        if any(str(member.get("instance_id")) == iid
-                               for member in deck.get("members") or [])]
-            if not deck_ids:
-                deck_ids = [str(party["active_deck"])]
             equip = u.get("equipment") or {}
             has_shift = bool(u.get('shift_equipment') or u.get('shift_materia'))
             slots = "@".join(f"{slot}-{equip.get(str(slot), equip.get(slot, '0'))}"
@@ -5384,7 +5393,9 @@ class PlayerState:
             # phone, so an NV unit's card never matched its owned card (vision_card_key).
             card = vision_card_key(u.get('vision_card'))
             card = f'0-{card}' if card else ''
-            for deck_id in deck_ids:
+            worn = [*equip.values(), *(u.get('shift_equipment') or {}).values(), *materia,
+                    *(u.get('shift_materia') or []), card, u.get('skin_id')]
+            for deck_id in (every_deck if any(str(v or '0') != '0' for v in worn) else [active]):
                 rows.append({"og2GHy49": iid, "r21y0YzS": deck_id,
                              "93Y6evuT": slots, "80NUYFMJ": mat,
                              "nQ1iAGf3": card})

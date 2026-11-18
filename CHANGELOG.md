@@ -5,7 +5,7 @@ Each entry is one update to this repo. To update: in your repo folder run `git p
 ## 2026-11-17: Trial checkpoint rewards and party equipment
 
 - Clearing a Trial checkpoint now awards 50,000 Lapis once, after all trials in that checkpoint group are cleared. Previously completed checkpoints are not paid retroactively.
-- Equipment remains one global loadout per unit instance; multi-deck equip requests merge changed values into that shared state instead of restoring an unchanged stale snapshot from another team.
+- Equipment is one loadout per unit, the same in every team and outside any team. Switching team in the party screen no longer discards an item just equipped, a unit added to another team keeps its equipment, and changes made under different teams are all saved. The other teams show a change after the party screen is left.
 
 ## 2026-11-17: Pre-NV featured rates
 

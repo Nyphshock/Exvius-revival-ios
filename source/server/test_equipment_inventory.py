@@ -1,3 +1,4 @@
+import contextlib
 import unittest
 import json
 import tempfile
@@ -68,32 +69,19 @@ class EquipmentInventoryTests(unittest.TestCase):
             self.assertIn("1-403040200", row["93Y6evuT"])
             self.assertIn("1-200100001", row["80NUYFMJ"])
 
-    def test_party_edit_projects_global_equipment_for_the_active_deck(self):
-        groups = {
-            "5Eb0Rig6": [{"r21y0YzS": "0"}, {"r21y0YzS": "1"}],
-            "TJ9eL80N": [{"og2GHy49": "unit-1", "r21y0YzS": "1",
-                           "93Y6evuT": "1-403040200"}],
-            "DW7uH6Mn": [], "VE7KZ8CY": [], "wc8vSHPS": [],
-        }
-        with patch.object(self.player, "groups", return_value=groups):
-            reply = self.player.apply_to_reply({"5Eb0Rig6": []}, reply_id="TS5Dx9aZ")
-            refresh = self.player.apply_to_reply({"5Eb0Rig6": []}, reply_id="X07iYtp5")
-        self.assertEqual(reply["5Eb0Rig6"], groups["5Eb0Rig6"])
-        self.assertEqual(reply["TJ9eL80N"], groups["TJ9eL80N"])
-        self.assertEqual(reply["TJ9eL80N"][0]["r21y0YzS"], "1")
-        self.assertIn("1-403040200", reply["TJ9eL80N"][0]["93Y6evuT"])
-        for tag in ("DW7uH6Mn", "VE7KZ8CY", "wc8vSHPS"):
-            self.assertIn(tag, reply)
-            self.assertIn(tag, refresh)
+    GEAR = {"403040200": {}, "403040300": {}, "403040400": {}}
+    SWITCH_TO_TEAM_2 = {"5Eb0Rig6": [{"r21y0YzS": "1", "2A6fYiEC": "0:0:unit-1,0:1:unit-2"}],
+                        "CN92arJK": [{"r21y0YzS": "1"}]}
 
-    def test_moving_equipped_unit_between_decks_preserves_server_loadout(self):
-        unit = {"instance_id": "unit-1", "equipment": {str(slot): "0" for slot in range(1, 7)},
-                "materia": ["0"] * 4}
+    def two_team_player(self, worn=None):
+        """unit-1 (wearing `worn`) is in team 1 only; team 1 is the active deck."""
+        unit = {"instance_id": "unit-1", "materia": ["0"] * 4,
+                "equipment": {**{str(slot): "0" for slot in range(1, 7)}, **(worn or {})}}
         other = {"instance_id": "unit-2", "equipment": {}, "materia": ["0"] * 4}
-        player = PlayerState({
+        return PlayerState({
             "identity": {"user_id": "300000001"},
             "roster": [unit, other],
-            "inventory": {"equipment": [{"item_id": 403040200, "count": 1}], "items": []},
+            "inventory": {"equipment": [{"item_id": int(item), "count": 1} for item in self.GEAR], "items": []},
             "progress": {"switches": {}, "cleared_challenges": {}, "paid_challenges": {}},
             "vision_cards": [],
             "party": {"active_deck": 0, "decks": [
@@ -103,39 +91,84 @@ class EquipmentInventoryTests(unittest.TestCase):
                     {"member_type": 0, "disp_order": 0, "instance_id": "unit-2"}]},
             ]},
         })
-        equip_request = {"Er92Kdhm": [{"93Y6evuT": "unit-1:1-403040200"}]}
-        party_request = {"5Eb0Rig6": [{"r21y0YzS": "1", "2A6fYiEC": "0:0:unit-1,0:1:unit-2"}],
-                         "CN92arJK": [{"r21y0YzS": "1"}]}
-        with patch.object(ffbe_state.State, "player", player), \
-                patch("player_state._load_ndjson", return_value={"403040200": {}}), \
-                patch("ffbe_player.score_quest_action"):
-            unit_equip({}, equip_request)
-            apply_party_edit(json.dumps(party_request))
-            self.assertEqual(player.data["party"]["active_deck"], 1)
-            self.assertEqual(player.data["roster"][0]["equipment"]["1"], "403040200")
-            empty_equip_request = {"Er92Kdhm": [{"93Y6evuT": "unit-1:1-0@2-0@3-0@4-0@5-0@6-0"}]}
-            unit_equip({}, empty_equip_request)
-            self.assertEqual(player.data["roster"][0]["equipment"]["1"], "403040200")
+
+    def serving(self, player):
+        stack = contextlib.ExitStack()
+        stack.enter_context(patch.object(ffbe_state.State, "player", player))
+        stack.enter_context(patch("player_state._load_ndjson", return_value=self.GEAR))
+        stack.enter_context(patch("ffbe_player.score_quest_action"))
+        return stack
+
+    def test_party_edit_reply_leaves_unsent_equipment_edits_alone(self):
+        groups = {
+            "5Eb0Rig6": [{"r21y0YzS": "0"}, {"r21y0YzS": "1"}],
+            "TJ9eL80N": [{"og2GHy49": "unit-1"}],
+            "DW7uH6Mn": [], "VE7KZ8CY": [], "wc8vSHPS": [],
+        }
+        with patch.object(self.player, "groups", return_value=groups):
+            reply = self.player.apply_to_reply({"5Eb0Rig6": []}, reply_id="TS5Dx9aZ")
+            refresh = self.player.apply_to_reply({"5Eb0Rig6": []}, reply_id="X07iYtp5")
+        self.assertEqual(reply["5Eb0Rig6"], groups["5Eb0Rig6"])
+        for tag in ("TJ9eL80N", "DW7uH6Mn", "VE7KZ8CY", "wc8vSHPS"):
+            self.assertNotIn(tag, reply)
+            self.assertIn(tag, refresh)
+
+    def test_equipped_unit_has_the_same_row_under_every_deck(self):
+        rows = self.two_team_player({"1": "403040200"})._equip_rows()
+        worn = [row for row in rows if row["og2GHy49"] == "unit-1"]
+        self.assertEqual([row["r21y0YzS"] for row in worn], ["0", "1"])
+        self.assertEqual({row["93Y6evuT"] for row in worn}, {"1-403040200@2-0@3-0@4-0@5-0@6-0"})
+        self.assertEqual([row["r21y0YzS"] for row in rows if row["og2GHy49"] == "unit-2"], ["0"])
+
+    def test_equipment_edit_survives_a_team_switch_sent_first(self):
+        """Recorded 2026-11-17 18:49: an item added under team 1, then the team switched, so the phone sent
+        PartyDeckEditRequest before UnitEquipRequest."""
+        player = self.two_team_player({"1": "403040200"})
+        edited = "1-403040200@2-0@3-403040300@4-0@5-0@6-0"
+        with self.serving(player):
+            apply_party_edit(json.dumps(self.SWITCH_TO_TEAM_2))
             groups = {"5Eb0Rig6": player._deck_rows(), "TJ9eL80N": player._equip_rows(),
                       "DW7uH6Mn": [], "VE7KZ8CY": [], "wc8vSHPS": []}
             with patch.object(player, "groups", return_value=groups):
                 reply = player.apply_to_reply({"5Eb0Rig6": []}, reply_id="TS5Dx9aZ")
-            projected = [row for row in reply["TJ9eL80N"] if row["og2GHy49"] == "unit-1"]
-            self.assertEqual({row["r21y0YzS"] for row in projected}, {"0", "1"})
-            self.assertTrue(all("1-403040200" in row["93Y6evuT"] for row in projected))
-            team_two_row = next(row for row in projected if row["r21y0YzS"] == "1")
-            unit_equip({}, {"Er92Kdhm": [{"93Y6evuT": f"unit-1:{team_two_row['93Y6evuT']}"}]})
-            self.assertEqual(player.data["roster"][0]["equipment"]["1"], "403040200")
-            rows = [row for row in player._equip_rows() if row["og2GHy49"] == "unit-1"]
-            self.assertEqual({row["r21y0YzS"] for row in rows}, {"0", "1"})
-            row = next(row for row in rows if row["r21y0YzS"] == "1")
-            self.assertEqual(row["r21y0YzS"], "1")
-            self.assertIn("1-403040200", row["93Y6evuT"])
+            unit_equip({}, {"Er92Kdhm": [{"r21y0YzS": "0", "93Y6evuT": f"unit-1:{edited}"}]})
             with tempfile.TemporaryDirectory() as directory:
                 path = Path(directory) / "player.json"
                 self.assertTrue(player.save(str(path)))
                 saved = json.loads(path.read_text(encoding="utf-8"))
-            self.assertEqual(saved["roster"][0]["equipment"]["1"], "403040200")
+        self.assertEqual(player.data["party"]["active_deck"], 1)
+        self.assertNotIn("TJ9eL80N", reply)
+        self.assertEqual(saved["roster"][0]["equipment"]["3"], "403040300")
+        self.assertEqual([(row["r21y0YzS"], row["93Y6evuT"]) for row in player._equip_rows()
+                          if row["og2GHy49"] == "unit-1"], [("0", edited), ("1", edited)])
+
+    def test_untouched_copy_under_another_team_does_not_undo_an_edit(self):
+        """Recorded 2026-11-17 17:44: team 1's copy carried the new weapon, team 2's copy was still the old one."""
+        old, new = "unit-1:1-403040200@2-0@3-0@4-0@5-0@6-0", "unit-1:1-403040300@2-0@3-0@4-0@5-0@6-0"
+        for copies in (f"{new};{old}", f"{old};{new}"):
+            with self.subTest(copies=copies):
+                player = self.two_team_player({"1": "403040200"})
+                with self.serving(player):
+                    unit_equip({}, {"Er92Kdhm": [{"r21y0YzS": "0;1", "93Y6evuT": copies}]})
+                self.assertEqual(player.data["roster"][0]["equipment"]["1"], "403040300")
+
+    def test_edits_made_under_two_teams_are_both_kept(self):
+        player = self.two_team_player({"1": "403040200"})
+        with self.serving(player):
+            unit_equip({}, {"Er92Kdhm": [{
+                "r21y0YzS": "0;1",
+                "93Y6evuT": "unit-1:1-403040200@2-0@3-403040300@4-0@5-0@6-0;"
+                             "unit-1:1-403040200@2-0@3-0@4-403040400@5-0@6-0"}]})
+        self.assertEqual(player.data["roster"][0]["equipment"],
+                         {"1": "403040200", "2": "0", "3": "403040300", "4": "403040400", "5": "0", "6": "0"})
+
+    def test_unequip_all_is_stored_right_after_a_party_edit(self):
+        player = self.two_team_player({"1": "403040200"})
+        with self.serving(player):
+            apply_party_edit(json.dumps(self.SWITCH_TO_TEAM_2))
+            unit_equip({}, {"Er92Kdhm": [{"r21y0YzS": "1", "93Y6evuT": "unit-1:1-0@2-0@3-0@4-0@5-0@6-0"}]})
+        self.assertEqual(player.data["roster"][0]["equipment"]["1"], "0")
+        self.assertEqual([row["r21y0YzS"] for row in player._equip_rows() if row["og2GHy49"] == "unit-1"], ["1"])
 
     def test_explicit_unequip_without_party_edit_still_clears_loadout(self):
         player = PlayerState({
