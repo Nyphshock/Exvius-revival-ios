@@ -3220,14 +3220,16 @@ def serve_event_gate(spec, reply_id):
             row['A5efbo71'] = image
             gate_changed = True
         raid = raids.get(area)
-        if raid and row.get('fSxqkF10') != raid['reward_banner_id']:
-            row['fSxqkF10'] = raid['reward_banner_id']
+        reward_banner_id = str((raid or {}).get('reward_banner_id') or '0')
+        if raid and reward_banner_id != '0' and row.get('fSxqkF10') != reward_banner_id:
+            row['fSxqkF10'] = reward_banner_id
             gate_changed = True
     added = 0
     for area, dungeon, mission in facts:
         if area in have:
             continue
         raid = raids.get(area)
+        reward_banner_id = str((raid or {}).get('reward_banner_id') or '0')
         rows.append({
             "uv60hgDW": area,             # SubRegionId -- THE key the tile lookups match
             "U9iHsau3": dungeon,          # the dungeon the tile opens
@@ -3241,11 +3243,12 @@ def serve_event_gate(spec, reply_id):
             "7Gvw6J82": EVENT_GATE_WINDOW_END,
             "4yT7FUqj": event_gate_art(area) or (raid['menu_background'] if raid else EVENT_GATE_ART),
             "A5efbo71": event_gate_art(area) or (raid['menu_background'] if raid else EVENT_GATE_ART),
-            "fSxqkF10": raid['reward_banner_id'] if raid else '0',
+            "fSxqkF10": reward_banner_id,
             # The shipped rows' remaining fields, with their own values, so the row's SHAPE matches what
             # the client has already parsed: the neutral zeros/empties where no reader was located.
             "0iWgxc1X": "0", "45wVefcS": "", "5mouF8P1": "", "B2FW5Qjq": "",
-            "C8Qf5bs6": "1" if raid else "0", "ET8L6iDw": "0", "M1p3ehVU": "", "MrxFQ63W": "",
+            "C8Qf5bs6": "1" if raid and reward_banner_id != "0" else "0",
+            "ET8L6iDw": "0", "M1p3ehVU": "", "MrxFQ63W": "",
             "QCLs6SV8": "0", "mTHe6pI0": "", "oY0vAuE9": "0", "vnhT2EM5": "",
             "xm7c08IS": "0", "z0ft1PK8": "0", "pAwU2R6W": "0", "td06MKEX": "0",
             "BGFw7qi4": "", "2oL4dNFy": "", "uwHx3jk0": "", "XY5ZfS0w": "", "0dh7yRIN": "",
@@ -3286,7 +3289,8 @@ def serve_event_gate(spec, reply_id):
     spec = serve_switches(spec)
     # GateMissionScene keeps the Rewards link only when its BannerMst has an
     # active BannerScheduleMst row. The master table itself contains no dates.
-    reward_ids = {raid['reward_banner_id'] for raid in raids.values() if raid}
+    reward_ids = {str(raid.get('reward_banner_id') or '0') for raid in raids.values()
+                  if raid and str(raid.get('reward_banner_id') or '0') != '0'}
     if reward_ids:
         schedules = [dict(row) for row in spec.get('jBL5XNf6', [])
                      if str(row.get('fSxqkF10')) not in reward_ids]

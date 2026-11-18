@@ -8,7 +8,7 @@ from unittest.mock import patch
 import ffbe_state
 from exvius_actions import unit_equip
 from ffbe_player import apply_party_edit
-from player_state import PlayerState
+from player_state import PlayerState, STORAGE_CURRENCY
 
 
 class EquipmentInventoryTests(unittest.TestCase):
@@ -32,6 +32,26 @@ class EquipmentInventoryTests(unittest.TestCase):
             self.assertEqual(self.player._grant_items([invalid_reward]), [])
             self.assertEqual(self.player._grant_items([valid_reward]), [valid_reward])
             self.assertEqual(self.player.data["inventory"]["equipment"][1]["count"], 2)
+
+    def test_mail_can_credit_exact_lapis_without_global_earned_multiplier(self):
+        mail = self.player.deliver_mail("A Frosty Offensive", [(50, 1, 50000)],
+                                        lapis_multiplier_exempt=True)
+
+        with patch("lapis_economy.earned") as earned, patch.object(self.player, "add_currency") as credit:
+            received = self.player.receive_mail(mail["mail_id"])
+
+        self.assertEqual(received, [{"kind": 50, "id": 1, "count": 50000,
+                                     "lapis_multiplier_exempt": True}])
+        credit.assert_called_once_with(STORAGE_CURRENCY[50], 50000)
+        earned.assert_not_called()
+
+        ordinary = self.player.deliver_mail("Ordinary earned Lapis", [(50, 1, 100)])
+        with patch("lapis_economy.earned", return_value=500) as earned, \
+                patch.object(self.player, "add_currency") as credit:
+            self.player.receive_mail(ordinary["mail_id"])
+
+        earned.assert_called_once_with(100)
+        credit.assert_called_once_with(STORAGE_CURRENCY[50], 500)
 
     def test_unit_equip_round_trips_equipment_and_materia(self):
         unit = {"instance_id": "unit-1", "equipment": {str(slot): "0" for slot in range(1, 7)},

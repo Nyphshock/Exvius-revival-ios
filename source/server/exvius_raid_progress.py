@@ -253,7 +253,8 @@ def personal_menu_groups(player, event):
     damage = int(saved.get('shared_damage', 0))
     level = damage // budget + 1
     return {
-        'dg5ZV3kQ': [{'xfirgH86': event['name'] + ' (Solo)', 'R01Wz7fe': str(level),
+        'dg5ZV3kQ': [{'xfirgH86': str(event.get('menu_label') or (event['name'] + ' (Solo)')),
+                     'R01Wz7fe': str(level),
                      '7DTnc2Lt': event['menu_background'],
                      'F4gkm9Rt': str((level - 1) * event['level_bonus_percent']),
                      'K3P1jcu7': str(damage % budget), 'Yc8Mm6y7': str(budget),
@@ -333,7 +334,8 @@ def apply_personal_raid_result(player, spec, mission_id, plaintext):
                     if any(not player._can_credit(row) for row in rewards):
                         raise ValueError('raid milestone cannot be projected: ' + milestone['label'])
                     mail = player.deliver_mail(event['name'] + ': ' + str(threshold) + ' points',
-                        [(row['kind'], row['id'], row['count']) for row in rewards], message=milestone['label'])
+                        [(row['kind'], row['id'], row['count']) for row in rewards], message=milestone['label'],
+                        lapis_multiplier_exempt=bool(event.get('lapis_multiplier_exempt')))
                     if mail is None:
                         raise ValueError('raid milestone mail could not be delivered')
                     saved['mailed_milestones'].append(threshold)
@@ -364,6 +366,7 @@ def _personal_result_reply(player, event, spec, receipt):
 def personal_rewards_page(player, dungeon_id):
     """Content for the original raid screen's embedded personal-reward panel."""
     from html import escape
+    from urllib.parse import quote
     event = personal_event(dungeon_id=dungeon_id)
     if event is None or player is None:
         return None
@@ -375,15 +378,22 @@ def personal_rewards_page(player, dungeon_id):
         'delivered' if m['points'] in mailed else '', format(m['points'], ','), escape(m['label']),
         '<small>Delivered to mailbox</small>' if m['points'] in mailed else '')
         for m in event['personal_milestones'])
+    banner_file = str(event.get('menu_background') or '')
+    banner = (f'<img class="banner" src="/en/sd/area/{escape(quote(banner_file), quote=True)}" '
+              f'alt="{escape(event["name"], quote=True)}" width="640" height="240">') if banner_file else ''
+    progress = '<p>Event points: <strong>' + format(points, ',') + '</strong>'
+    if event.get('show_solo_level', True):
+        progress += '<br>Solo raid level: <strong>' + str(level) + '</strong>'
+    progress += '</p>'
     return ('''<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Raid Rewards</title>
 <style>body{margin:0;padding:14px;background:#081d43;color:#fff;font:16px Arial,sans-serif}
 h1{font-size:21px;color:#ffe398;margin:0 0 12px}p{line-height:1.5}strong{color:#ffe398}
+.banner{display:block;width:100%;height:auto;margin:0 0 12px;border-radius:4px}
 table{border-collapse:collapse;width:100%;background:#0d2d58}th,td{text-align:left;padding:12px 9px;border:1px solid #4b6990}
 th{background:#194875;color:#ffe398}td:first-child{white-space:nowrap}.delivered{background:#173f48}
 small{display:block;color:#a9e9cb;margin-top:5px}</style></head><body><h1>''' +
-        escape(event['name']) + '</h1><p>Personal points: <strong>' + format(points, ',') +
-        '</strong><br>Solo raid level: <strong>' + str(level) +
-        '</strong></p><p>Milestone rewards are delivered to your mailbox.</p>' +
+        banner + '<h1>' + escape(event['name']) + '</h1>' + progress +
+        '<p>Milestone rewards are delivered to your mailbox.</p>' +
         '<table><thead><tr><th>Points</th><th>Reward</th></tr></thead><tbody>' + rows +
         '</tbody></table></body></html>')

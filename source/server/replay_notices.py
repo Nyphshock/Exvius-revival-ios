@@ -33,6 +33,7 @@ TAG = 'tN8f0PSB'
 NOTICE_ID_BASE = 880000
 INDEX_BASE = 500
 HOST = 'https://v900-lapis.gumi.sg'
+FROSTY_NOTICE_OFFSET = 10000
 
 
 def enabled() -> bool:
@@ -400,7 +401,36 @@ def rows() -> list[dict]:
             'DSJpb89M': '', 'oIra47LK': '1', '1X65WPLU': f'{HOST}/exvius/notices/{index}.html',
             'QLfe23bu': str(INDEX_BASE + index), '8amsKpQ2': '0', 'I2PbiZ1f': '', 'GTESVt57': '',
             '7DUC49n8': '', 'qo3PECw6': '0', '52ihocTI': '0'})
+    frosty = _frosty_reward_notice(current)
+    if frosty:
+        out.append(frosty)
     return out
+
+
+def _frosty_reward_notice(current: int) -> dict | None:
+    """Persistent News entry for this profile's A Frosty Offensive point ledger."""
+    from exvius_raid_progress import personal_event
+    event = personal_event(dungeon_id='90005')
+    if event is None:
+        return None
+    _moment_value, start = _moment(current)
+    begin = start.strftime('%Y-%m-%d %H:%M:%S')
+    notice_index = FROSTY_NOTICE_OFFSET + int(event['event_id'])
+    return {
+        'td06MKEX': str(NOTICE_ID_BASE + notice_index),
+        '5GNraZM0': '0', 'i4Bb9ySk': '1', '1fKgZk2I': '1',
+        '15Y3fBmF': json.dumps({'en': event['name'] + ': Points & Rewards'}, ensure_ascii=False),
+        'w7VR6ypY': str(current),
+        '1d8R5ajV': begin, 'VjJQ51uG': begin, 'm8ivD4NX': '2099-12-31 23:59:59',
+        'o6n5aQ8C': begin, '9miE75sp': (start + timedelta(days=7)).strftime('%Y-%m-%d %H:%M:%S'),
+        '5r8HSq1N': begin, 'M9ZKJY3w': '2099-12-31 23:59:59',
+        'DSJpb89M': 'View your current event points and milestone rewards.',
+        'oIra47LK': '1',
+        '1X65WPLU': f"{HOST}/exvius/raid-rewards/{event['dungeon_id']}.html",
+        'QLfe23bu': str(INDEX_BASE + notice_index),
+        '8amsKpQ2': '0', 'I2PbiZ1f': '', 'GTESVt57': '', '7DUC49n8': '',
+        'qo3PECw6': '0', '52ihocTI': '0',
+    }
 
 
 def add_rows(spec):

@@ -3874,7 +3874,8 @@ class PlayerState:
             cur = STORAGE_CURRENCY.get(kind)
             if cur:
                 credit = count
-                if kind == 50 and not getattr(self, "_purchase", False):
+                if (kind == 50 and not getattr(self, "_purchase", False)
+                    and not it.get("lapis_multiplier_exempt")):
                     from lapis_economy import earned
                     credit = earned(count)     # earned Lapis only (lapis_economy.py); purchases set _purchase
                 # The returned row keeps the reward's own count: callers check `_grant_items([row]) == [row]`
@@ -4005,7 +4006,8 @@ class PlayerState:
 
     def deliver_mail(self, title: str, items, *, mail_id=None, message: str = "",
                      icon_type: int = 0, attach_type: int | None = None, daily_login: bool = False,
-                     send_date: str | None = None, protect_date: str = "") -> dict | None:
+                     send_date: str | None = None, protect_date: str = "",
+                     lapis_multiplier_exempt: bool = False) -> dict | None:
         """Append a mailbox entry carrying `items`, each `(item_type, item_id, count)`.
 
         Idempotent per `mail_id` (re-delivering the same id returns the existing entry), so a reply can call
@@ -4033,6 +4035,8 @@ class PlayerState:
             "protect_date": str(protect_date),
             "items": [{"item_type": int(t), "item_id": int(i), "count": int(c)} for t, i, c in items],
         }
+        if lapis_multiplier_exempt:
+            entry["lapis_multiplier_exempt"] = True
         self.mailbox.append(entry)
         return entry
 
@@ -4057,9 +4061,14 @@ class PlayerState:
             if int(m.get("receive_type", 0) or 0) == 2:
                 return []
             # `meta`: reward metadata a mail item can carry (a Trust Moogle's target; first_clear.py back-pay).
-            rows = [dict(it.get("meta") or {}, kind=int(it.get("item_type", 0) or 0),
-                         id=int(it.get("item_id", 0) or 0), count=int(it.get("count", 0) or 0))
-                    for it in m.get("items") or []]
+            rows = []
+            for it in m.get("items") or []:
+                kind = int(it.get("item_type", 0) or 0)
+                row = dict(it.get("meta") or {}, kind=kind,
+                           id=int(it.get("item_id", 0) or 0), count=int(it.get("count", 0) or 0))
+                if kind == 50 and m.get("lapis_multiplier_exempt"):
+                    row["lapis_multiplier_exempt"] = True
+                rows.append(row)
             bad = [r for r in rows if not self._can_credit(r)]
             if bad:
                 print("mail %s: NOT received -- no projection for %s, so nothing was credited"

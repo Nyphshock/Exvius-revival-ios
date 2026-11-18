@@ -1,16 +1,18 @@
-from datetime import date
+from datetime import date, datetime, timedelta
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
 import event_archive
 import exvius_events
+import exvius_raid_progress
 import ffbe_banner
 import ffbe_player
 import gacha_archive
 import gacha_rotation
 import history_runs
 import replay
+import replay_notices
 from trial_progression import CHECKPOINTS
 
 
@@ -319,6 +321,143 @@ class ArchiveReplayTests(unittest.TestCase):
                 patch.object(gacha_archive, "held_ticket_ids", return_value=[]):
             self.assertEqual([banner["id"] for banner in gacha_archive.visible_banners(player, banners)], ["1"])
             self.assertEqual(gacha_archive.menu(player, banners)["groups"][0]["count"], 1)
+
+
+class FrostyOffensiveRewardsTests(unittest.TestCase):
+    def test_frosty_missions_score_points_and_final_milestone_is_50000_lapis(self):
+        with patch.object(exvius_raid_progress, "_PERSONAL_EVENTS", None):
+            event = exvius_raid_progress.personal_event(mission_id="9000402")
+
+        self.assertEqual(event["mission_points"], {
+            "9000402": 15, "9000403": 40, "9000404": 90, "9000405": 160})
+        final = event["personal_milestones"][-1]
+        self.assertEqual(final["points"], 12000)
+        self.assertEqual(final["reward"], {"kind": 50, "id": 1, "count": 50000})
+
+    def test_full_frosty_clear_records_points_and_mails_crossed_reward(self):
+        class Player:
+            mode = "active"
+            dirty = False
+
+            def __init__(self):
+                self.data = {"exvius_repeat": {"attempt": {
+                    "mid": "9000402", "status": "completed", "sequence": "frosty-1",
+                    "raid_boss_hp": 1000,
+                }}}
+                self.mails = []
+
+            def _can_credit(self, _reward):
+                return True
+
+            def deliver_mail(self, title, items, *, message="", lapis_multiplier_exempt=False):
+                self.mails.append({"title": title, "items": items, "message": message,
+                                   "lapis_multiplier_exempt": lapis_multiplier_exempt})
+                return {"mail_id": str(len(self.mails))}
+
+        with patch.object(exvius_raid_progress, "_PERSONAL_EVENTS", None):
+            player = Player()
+            reply = exvius_raid_progress.apply_personal_raid_result(
+                player, {"09HRWXDf": [{}]}, "9000402",
+                '{"nSG9Jb1s":[{"NYb0Cri6":"TOTAL_DAMAGE","6gAX1BpC":"1000"}]}')
+
+        saved = player.data["exvius_raid_progress"]["personal_events"]["905"]
+        self.assertEqual(saved["points"], 15)
+        self.assertEqual(saved["mailed_milestones"], [10])
+        self.assertEqual(player.mails[0]["items"], [(20, 101000300, 10)])
+        self.assertEqual(reply["71ctQHWm"][0]["UbQ26oH4"], "15")
+
+    def test_frosty_final_milestone_mails_50000_lapis_at_12000_points(self):
+        class Player:
+            mode = "active"
+            dirty = False
+
+            def __init__(self):
+                self.data = {"exvius_repeat": {"attempt": {
+                    "mid": "9000402", "status": "completed", "sequence": "frosty-final",
+                    "raid_boss_hp": 1000,
+                }}, "exvius_raid_progress": {"personal_events": {"905": {
+                    "points": 11985, "shared_damage": 0, "receipts": {},
+                    "mailed_milestones": [10, 20, 40, 60, 80, 100, 140, 180, 240, 300, 400,
+                        500, 600, 720, 860, 1000, 1200, 1400, 1600, 1800, 2000, 2300, 2600,
+                        3000, 3500, 4000, 4500, 5000, 5500, 6000, 6500, 7000, 7500, 8000,
+                        8500, 9000, 9500, 10000],
+                }}}}
+                self.mails = []
+
+            def _can_credit(self, _reward):
+                return True
+
+            def deliver_mail(self, title, items, *, message="", lapis_multiplier_exempt=False):
+                self.mails.append({"title": title, "items": items, "message": message,
+                                   "lapis_multiplier_exempt": lapis_multiplier_exempt})
+                return {"mail_id": str(len(self.mails))}
+
+        with patch.object(exvius_raid_progress, "_PERSONAL_EVENTS", None):
+            player = Player()
+            exvius_raid_progress.apply_personal_raid_result(
+                player, {"09HRWXDf": [{}]}, "9000402",
+                '{"nSG9Jb1s":[{"NYb0Cri6":"TOTAL_DAMAGE","6gAX1BpC":"1000"}]}')
+
+        self.assertEqual(player.data["exvius_raid_progress"]["personal_events"]["905"]["points"], 12000)
+        self.assertEqual(player.mails[0]["items"], [(50, 1, 50000)])
+        self.assertTrue(player.mails[0]["lapis_multiplier_exempt"])
+
+    def test_frosty_news_notice_opens_personal_report(self):
+        event = {"event_id": "905", "dungeon_id": "90005", "name": "A Frosty Offensive"}
+        start = datetime(2026, 11, 18)
+        with patch("exvius_raid_progress.personal_event", return_value=event), \
+                patch.object(replay_notices, "_moment", return_value=(start, start)):
+            notice = replay_notices._frosty_reward_notice(42)
+
+        self.assertIn("A Frosty Offensive", notice["15Y3fBmF"])
+        self.assertTrue(notice["1X65WPLU"].endswith("/exvius/raid-rewards/90005.html"))
+
+    def test_frosty_progress_notice_is_in_the_news_rows(self):
+        start = datetime(2026, 11, 18)
+        summary = {"start": start, "from": start.date(), "to": start.date() + timedelta(days=7),
+                   "finished": False, "holiday": None, "summons": [], "deals": [],
+                   "bundles": [], "mails": [], "events": []}
+        event = {"event_id": "905", "dungeon_id": "90005", "name": "A Frosty Offensive"}
+        with patch.object(gacha_rotation, "week", return_value=(42, start, start + timedelta(days=7))), \
+                patch.object(replay, "anchor_week", return_value=0), \
+                patch.object(replay_notices, "_weeks_listed", return_value=1), \
+                patch.object(replay_notices, "week_summary", return_value=summary), \
+                patch.object(replay_notices, "_moment", return_value=(start, start)), \
+                patch("exvius_raid_progress.personal_event", return_value=event):
+            notices = replay_notices.rows()
+
+        frosty = next(row for row in notices if row["td06MKEX"] == "890905")
+        self.assertIn("A Frosty Offensive", frosty["15Y3fBmF"])
+        self.assertTrue(frosty["1X65WPLU"].endswith("/exvius/raid-rewards/90005.html"))
+
+    def test_frosty_progress_notice_is_added_to_news_rows(self):
+        start = datetime(2026, 11, 18)
+        summary = {"start": start, "from": start.date(), "to": start.date() + timedelta(days=7),
+                   "finished": False, "holiday": None, "summons": [], "deals": [],
+                   "bundles": [], "mails": [], "events": []}
+        event = {"event_id": "905", "dungeon_id": "90005", "name": "A Frosty Offensive"}
+        with patch.object(gacha_rotation, "week", return_value=(0, start, start + timedelta(days=7))), \
+                patch.object(replay, "anchor_week", return_value=0), \
+                patch.object(replay_notices, "week_summary", return_value=summary), \
+                patch("exvius_raid_progress.personal_event", return_value=event):
+            notices = replay_notices.rows()
+
+        notice = next(row for row in notices if row["td06MKEX"] == "890905")
+        self.assertIn("A Frosty Offensive", notice["15Y3fBmF"])
+        self.assertTrue(notice["1X65WPLU"].endswith("/exvius/raid-rewards/90005.html"))
+
+    def test_frosty_report_shows_banner_current_points_and_delivered_rewards(self):
+        player = SimpleNamespace(data={"exvius_raid_progress": {"personal_events": {
+            "905": {"points": 1234, "shared_damage": 0, "mailed_milestones": [10, 20]},
+        }}})
+        with patch.object(exvius_raid_progress, "_PERSONAL_EVENTS", None):
+            page = exvius_raid_progress.personal_rewards_page(player, "90005")
+
+        self.assertIn("/en/sd/area/event_905.png", page)
+        self.assertIn("1,234", page)
+        self.assertIn("X-Potion (10)", page)
+        self.assertIn("Delivered to mailbox", page)
+        self.assertIn("Lapis (50,000)", page)
 
     def test_removed_evergreen_summons_are_hidden_and_not_unlocked(self):
         player = SimpleNamespace(data={"progress": {"cleared_missions": []}})
