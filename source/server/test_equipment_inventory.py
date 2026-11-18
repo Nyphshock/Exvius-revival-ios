@@ -140,7 +140,8 @@ class EquipmentInventoryTests(unittest.TestCase):
     def test_explicit_unequip_without_party_edit_still_clears_loadout(self):
         player = PlayerState({
             "identity": {"user_id": "300000001"},
-            "roster": [{"instance_id": "unit-1", "equipment": {"1": "403040200"},
+            "roster": [{"instance_id": "unit-1",
+                        "equipment": {"1": "403040200", **{str(slot): "0" for slot in range(2, 7)}},
                         "materia": ["0"] * 4}],
             "inventory": {"equipment": [{"item_id": 403040200, "count": 1}], "items": []},
         })
@@ -150,20 +151,21 @@ class EquipmentInventoryTests(unittest.TestCase):
 
         self.assertEqual(player.data["roster"][0]["equipment"]["1"], "0")
 
-    def test_unit_equip_uses_active_deck_loadout_when_duplicate_rows_disagree(self):
+    def test_unit_equip_merges_changed_deck_segment_into_global_loadout(self):
         player = PlayerState({
             "identity": {"user_id": "300000001"},
-            "roster": [{"instance_id": "unit-1", "equipment": {"1": "403040200"},
+            "roster": [{"instance_id": "unit-1", "equipment": {"1": "403040200",
+                        **{str(slot): "0" for slot in range(2, 7)}},
                         "materia": ["0"] * 4}],
             "inventory": {"equipment": [
                 {"item_id": 403040200, "count": 1}, {"item_id": 403040300, "count": 1}],
                 "items": []},
-            "party": {"active_deck": 1, "decks": []},
+            "party": {"active_deck": 0, "decks": []},
         })
         request = {"Er92Kdhm": [{
-            "r21y0YzS": "1;0",
-            "93Y6evuT": "unit-1:1-403040300@2-0@3-0@4-0@5-0@6-0;"
-                         "unit-1:1-403040200@2-0@3-0@4-0@5-0@6-0",
+            "r21y0YzS": "0;1",
+            "93Y6evuT": "unit-1:1-403040200@2-0@3-0@4-0@5-0@6-0;"
+                         "unit-1:1-403040300@2-0@3-0@4-0@5-0@6-0",
         }]}
 
         with patch.object(ffbe_state.State, "player", player), \

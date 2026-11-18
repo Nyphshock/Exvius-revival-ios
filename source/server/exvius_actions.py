@@ -38,22 +38,20 @@ def _refresh(spec):
     return out
 
 
-def _active_deck_loadout(row, active_deck):
+def _deck_loadout_rows(row):
     deck_ids = [part.strip() for part in str(row.get("r21y0YzS") or "").split(";")]
     if len(deck_ids) < 2:
-        return row
-    try:
-        selected = deck_ids.index(str(active_deck))
-    except ValueError:
-        return None
-    out = dict(row)
-    out["r21y0YzS"] = deck_ids[selected]
-    for field in _DECK_LOADOUT_FIELDS:
-        if field not in row:
-            continue
-        values = str(row[field] or "").split(";")
-        if len(values) == len(deck_ids):
-            out[field] = values[selected]
+        return [(deck_ids[0] if deck_ids else "", row)]
+    out = []
+    for index, deck_id in enumerate(deck_ids):
+        candidate = dict(row, r21y0YzS=deck_id)
+        for field in _DECK_LOADOUT_FIELDS:
+            if field not in row:
+                continue
+            values = str(row[field] or "").split(";")
+            if len(values) == len(deck_ids):
+                candidate[field] = values[index]
+        out.append((deck_id, candidate))
     return out
 
 
@@ -157,26 +155,44 @@ def unit_equip(spec, req):
     gear = {row["J1YX9kmM"]: int(row["Qy5EvcK1"]) for row in player.equip_item_rows()}
     materia = {row["H5jBL0Vf"]: int(row["Qy5EvcK1"]) for row in player.materia_rows()}
     cards = {str(card["user_vc_id"]) for card in player.data.get("vision_cards", [])}
-    loadouts = {}
+    candidates = {}
     try:
         for row in rows:
-            row = _active_deck_loadout(row, player.data.get("party", {}).get("active_deck", 0))
-            if row is None:
-                continue
-            decoded, _ = _wire_loadouts(row, roster, ignore_unknown=True)
-            for iid, fields in decoded.items():
-                for field, values in fields.items():
-                    if field in ("equipment", "shift_equipment", "materia", "shift_materia"):
-                        owned = materia if "materia" in field else gear
-                        counts = Counter(values if "materia" in field else values.values())
-                        if any(item != "0" and count > owned.get(item, 0) for item, count in counts.items()):
-                            raise ValueError("unowned equipment or materia")
-                    if field in ("vision_card", "shift_vision_card") and values and values not in cards:
-                        # _wire_loadouts reduces the phone's "0-<user_vc_id>" to the user_vc_id.
-                        raise ValueError("unowned vision card")
-                loadouts.setdefault(iid, {}).update(fields)
+            for deck_id, deck_row in _deck_loadout_rows(row):
+                decoded, _ = _wire_loadouts(deck_row, roster, ignore_unknown=True)
+                for iid, fields in decoded.items():
+                    candidates.setdefault(iid, []).append((deck_id, fields))
     except (AttributeError, TypeError, ValueError):
         _note("unit-equip: invalid equipment update")
+        return _refresh(spec)
+    active_deck = str(player.data.get("party", {}).get("active_deck", 0))
+    loadouts = {}
+    for iid, versions in candidates.items():
+        current = roster[iid]
+        fields = {field for _deck_id, version in versions for field in version}
+        for field in fields:
+            changed = [(deck_id, version[field]) for deck_id, version in versions
+                       if field in version and version[field] != current.get(field)]
+            if not changed:
+                continue
+            distinct = []
+            for deck_id, value in changed:
+                if value not in [known for _known_deck, known in distinct]:
+                    distinct.append((deck_id, value))
+            active = [entry for entry in distinct if entry[0] == active_deck]
+            loadouts.setdefault(iid, {})[field] = (active or distinct)[-1][1]
+    try:
+        for iid, fields in loadouts.items():
+            for field, values in fields.items():
+                if field in ("equipment", "shift_equipment", "materia", "shift_materia"):
+                    owned = materia if "materia" in field else gear
+                    counts = Counter(values if "materia" in field else values.values())
+                    if any(item != "0" and count > owned.get(item, 0) for item, count in counts.items()):
+                        raise ValueError("unowned equipment or materia")
+                if field in ("vision_card", "shift_vision_card") and values and values not in cards:
+                    raise ValueError("unowned vision card")
+    except (AttributeError, TypeError, ValueError):
+        _note("unit-equip: invalid global equipment update")
         return _refresh(spec)
     guard = getattr(player, "_party_equip_guard", None)
     player._party_equip_guard = None
