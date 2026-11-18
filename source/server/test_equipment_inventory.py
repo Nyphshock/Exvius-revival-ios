@@ -121,13 +121,15 @@ class EquipmentInventoryTests(unittest.TestCase):
             with patch.object(player, "groups", return_value=groups):
                 reply = player.apply_to_reply({"5Eb0Rig6": []}, reply_id="TS5Dx9aZ")
             projected = [row for row in reply["TJ9eL80N"] if row["og2GHy49"] == "unit-1"]
-            self.assertEqual({row["r21y0YzS"] for row in projected}, {"0", "1"})
-            self.assertTrue(all("1-403040200" in row["93Y6evuT"] for row in projected))
-            team_two_row = next(row for row in projected if row["r21y0YzS"] == "1")
+            self.assertEqual(len(projected), 1)
+            self.assertEqual(projected[0]["r21y0YzS"], "1")
+            self.assertIn("1-403040200", projected[0]["93Y6evuT"])
+            team_two_row = projected[0]
             unit_equip({}, {"Er92Kdhm": [{"93Y6evuT": f"unit-1:{team_two_row['93Y6evuT']}"}]})
             self.assertEqual(player.data["roster"][0]["equipment"]["1"], "403040200")
-            row = next(row for row in player._equip_rows()
-                       if row["og2GHy49"] == "unit-1" and row["r21y0YzS"] == "1")
+            rows = [row for row in player._equip_rows() if row["og2GHy49"] == "unit-1"]
+            self.assertEqual(len(rows), 1)
+            row = rows[0]
             self.assertEqual(row["r21y0YzS"], "1")
             self.assertIn("1-403040200", row["93Y6evuT"])
             with tempfile.TemporaryDirectory() as directory:

@@ -5359,16 +5359,11 @@ class PlayerState:
                 tags[2]: self._beast_deck_rows(party)}
 
     def _equip_rows(self, party=None) -> list:
-        """Project each unit's global loadout for every party deck containing that unit."""
+        """Project exactly one global loadout row per owned unit instance."""
         party = self.data['party'] if party is None else party
         rows = []
         for u in self.data["roster"]:
             iid = str(u["instance_id"])
-            deck_ids = [str(deck["id"]) for deck in party["decks"]
-                        if any(str(member.get("instance_id")) == iid
-                               for member in deck.get("members") or [])]
-            if not deck_ids:
-                deck_ids = [str(party["active_deck"])]
             equip = u.get("equipment") or {}
             has_shift = bool(u.get('shift_equipment') or u.get('shift_materia'))
             slots = "@".join(f"{slot}-{equip.get(str(slot), equip.get(slot, '0'))}"
@@ -5384,12 +5379,11 @@ class PlayerState:
             # phone, so an NV unit's card never matched its owned card (vision_card_key).
             card = vision_card_key(u.get('vision_card'))
             card = f'0-{card}' if card else ''
-            for deck_id in deck_ids:
-                rows.append({"og2GHy49": iid, "r21y0YzS": deck_id,
-                             "93Y6evuT": slots, "80NUYFMJ": mat,
-                             "nQ1iAGf3": card})
-                if 'skin_id' in u:
-                    rows[-1]['2c8nqLrM'] = str(u['skin_id'])
+            rows.append({"og2GHy49": iid, "r21y0YzS": str(party["active_deck"]),
+                         "93Y6evuT": slots, "80NUYFMJ": mat,
+                         "nQ1iAGf3": card})
+            if 'skin_id' in u:
+                rows[-1]['2c8nqLrM'] = str(u['skin_id'])
         return rows
 
     def _deck_rows(self, party=None) -> list:
