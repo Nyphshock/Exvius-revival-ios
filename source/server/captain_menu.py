@@ -65,13 +65,14 @@ import os
 import re
 import struct
 import threading
+from collections import defaultdict
 from datetime import datetime, timezone
 
 SCENE = "211020100"
 RESOURCE_ID = "290001"             # F_RESOURCE_MAP_MST row of 211020100.cpk
 VERSION_FIELD = "OzT5lSz3"          # base (common_lang) file version in F_RESOURCE_MAP_VERSION_MST_LOCALIZE
 VERSION_BASE = 20000
-MENU_LAYOUT_REVISION = 2
+MENU_LAYOUT_REVISION = 4
 SUBMAP = 67
 KING_NPC = 0x05F5EC54               # King Mog's sprite (sub-map 67, events 2 and 7)
 KING_STORE = 900104                 # King Mog's native store, opened by both event pages
@@ -81,15 +82,20 @@ CAPTAIN_NPC = 0x0BED6C90
 KING_PROMPT_SHIPPED = 110588       # "<name_npc=100002900><br>What do you want to exchange, Kupo?"
 CAPTAIN_PROMPT_SHIPPED = 110719    # "<name=200028><br>Which exchange do you want to make?"
 NEXT_TEXT, LEAVE_TEXT = 110717, 110718
-TEXT_PROMPT, TEXT_NONE, TEXT_OUT, TEXT_MOVED, TEXT_ENTRY = 190001, 190002, 190003, 190004, 190100
-MAX_ENTRIES = 80                    # labels are one byte: pages + 2 per entry + 1 must stay under 256
+TEXT_PROMPT, TEXT_NONE, TEXT_OUT, TEXT_MOVED, TEXT_ITEM_EXCHANGE, TEXT_BACK, TEXT_LIST_PROMPT, TEXT_ENTRY = (
+    190001, 190002, 190003, 190004, 190005, 190006, 190007, 190100)
+MAX_ENTRIES = 80
+MAX_MENU_ITEMS = 189                # one-byte labels: root + pages + one open-store label per item + end
 KING = "<name_npc=100002900><br>"
 # Map text breaks its own lines (`<br>`, about 50 characters at most in the shipped lines).
 TEXTS = {
-    TEXT_PROMPT: KING + "Which exchange do you want, kupo?",
+    TEXT_PROMPT: KING + "What do you want to exchange, kupo?",
     TEXT_NONE: KING + "You don't have any exchange currency<br>right now, kupo. Come back when you do!",
     TEXT_OUT: KING + "You don't have any of that currency<br>left, kupo!",
     TEXT_MOVED: "All event exchanges are now available from King Mog.",
+    TEXT_ITEM_EXCHANGE: "Item Exchange",
+    TEXT_BACK: "Back",
+    TEXT_LIST_PROMPT: KING + "Which item do you want, kupo?",
 }
 # Global's permanent and Dark Visions exchanges, now listed by King Mog when their currency is held.
 OWN = (
@@ -171,6 +177,50 @@ def entries(now=None, week=None) -> list:
     return out[:MAX_ENTRIES]
 
 
+def exchange_items(stores: list) -> list:
+    """Flat, in-stock product list for the King Mog menu; each item retains its own store currency."""
+    if not stores:
+        return []
+    import exvius_actions_shops as shops
+    from exvius_shop_catalogue import catalogue, exhausted_medal_rows, labels
+
+    stock_by_store = {}
+    for row in shops._rows("F_STORE_ITEM_MST"):
+        if str(row.get("YWF08vZS")) == "50":
+            stock_by_store.setdefault(str(row["Z20mNDvL"]), []).append(str(row["6uIYE15X"]))
+    offers_by_medal = defaultdict(list)
+    for pid, offer in catalogue()[2].items():
+        if offer.get("medal"):
+            offers_by_medal[str(offer["medal"])].append(pid)
+    names = labels()
+    exhausted = exhausted_medal_rows()
+    own_names = {store: name for store, _, name, _ in OWN}
+    out, seen = [], set()
+    for store in stores:
+        store_id = str(store["store"])
+        for medal in stock_by_store.get(store_id, []):
+            if medal in exhausted or medal in seen:
+                continue
+            product_ids = offers_by_medal.get(medal) or []
+            reward_name = names.get(product_ids[0], {}).get("name") if product_ids else None
+            if not reward_name:
+                reward_name = own_names.get(store_id)
+            if not reward_name:
+                continue
+            event_name = _short(store["name"])
+            if store_id not in own_names and event_name.lower() not in reward_name.lower():
+                suffix = " - " + event_name
+                max_reward = max(1, 34 - len(suffix))
+                reward_name = reward_name[:max_reward].rstrip()
+                label = reward_name + suffix
+            else:
+                label = reward_name[:34]
+            out.append({"store": store_id, "currency": str(store["currency"]), "name": label})
+            seen.add(medal)
+    out.sort(key=lambda item: (item["name"].casefold(), item["store"]))
+    return out[:MAX_MENU_ITEMS]
+
+
 # --- the script -------------------------------------------------------------------------------------------
 
 def _cmd(code: int, data: bytes = b"") -> bytes:
@@ -181,29 +231,30 @@ STEP = _cmd(0x01)
 
 
 def script(items: list) -> tuple[list, bytes]:
-    """(label offsets, script bytes) of the Captain's page for these entries."""
+    """(label offsets, script bytes) of King Mog's Item Exchange flow."""
     n = len(items)
     if not n:
         body = _cmd(0x08, struct.pack(">I", TEXT_NONE)) + STEP
         return [len(body)], body
     pages = [list(range(i, min(i + 3, n))) for i in range(0, n, 3)]
     k = len(pages)
-    end = k + 2 * n
-    page_of = {j: p for p, js in enumerate(pages) for j in js}
+    item_start = 1 + k
+    end = item_start + n
+    page_of = {j: p + 1 for p, js in enumerate(pages) for j in js}
     blocks = {}
+    root = bytes([2]) + struct.pack(">IB", TEXT_ITEM_EXCHANGE, 1) + struct.pack(">IB", LEAVE_TEXT, end)
+    blocks[0] = _cmd(0x15, root + struct.pack(">I", TEXT_PROMPT)) + STEP
     for p, js in enumerate(pages):
-        options = [(TEXT_ENTRY + j, k + 2 * j) for j in js]
-        if k > 1:
-            options.append((NEXT_TEXT, (p + 1) % k))
-        options.append((LEAVE_TEXT, end))
+        options = [(TEXT_ENTRY + j, item_start + j) for j in js]
+        if p + 1 < k:
+            options.append((NEXT_TEXT, p + 2))
+        options.append((TEXT_BACK, 0))
         data = bytes([len(options)]) + b"".join(struct.pack(">IB", t, lab) for t, lab in options)
-        blocks[p] = _cmd(0x15, data + struct.pack(">I", TEXT_PROMPT)) + STEP
+        blocks[p + 1] = _cmd(0x15, data + struct.pack(">I", TEXT_LIST_PROMPT)) + STEP
     for j, item in enumerate(items):
         back = _cmd(0x04, struct.pack(">H", page_of[j])) + STEP
-        test = struct.pack(">BBBBIBB", 0, 1, 0, 20, int(item["currency"]), 1, k + 2 * j + 1)
-        blocks[k + 2 * j] = (_cmd(0x19, test) + STEP + _cmd(0x08, struct.pack(">I", TEXT_OUT)) + STEP + back)
-        blocks[k + 2 * j + 1] = (_cmd(0x44, struct.pack(">I", int(item["store"]))) + _cmd(0x02, b"\x00\x01")
-                                 + STEP + back)
+        blocks[item_start + j] = (_cmd(0x44, struct.pack(">I", int(item["store"])))
+                                  + _cmd(0x02, b"\x00\x01") + STEP + back)
     body, labels = b"", []
     for label in range(end):
         labels.append(len(body))
@@ -466,7 +517,8 @@ def state() -> dict:
         with open(_state_path(), encoding="utf-8") as fh:
             return json.load(fh)
     except (OSError, ValueError):
-        return {"rev": 0, "sig": "off", "entries": [], "names_rev": 0, "names_sig": "off", "names": {}}
+        return {"rev": 0, "sig": "off", "entries": [], "offers": [],
+                "names_rev": 0, "names_sig": "off", "names": {}}
 
 
 def _signature(items) -> str:
@@ -512,28 +564,29 @@ def _next_rev(old) -> int:
 
 
 def refresh(now=None) -> dict:
-    """Work out the Captain's list and the merchants' store names for this login and remember them (called when
-    the version table goes out). The menu and the names have revisions of their own: a new week renames
-    stores (two small text tables) without the Farplane pack being downloaded again."""
+    """Work out King Mog's owned exchanges and item list for this login, plus the store-name overrides."""
     import exvius_actions_shops as shops
     from ffbe_state import State
-    items = names = None
+    stores = offers = names = None
     if enabled() or shops.exchange_schedule_enabled():
         if State.player is None:
             return state()      # no save loaded: keep what the phone has
         try:
             week = shops._replay_week(now)
-            items = entries(now, week) if enabled() else None
-            names = merchants(week, items)
+            stores = entries(now, week) if enabled() else None
+            offers = exchange_items(stores) if stores is not None else None
+            names = merchants(week, stores)
         except Exception as exc:  # noqa: BLE001 -- keep what the phone has
             print(f"[captain-menu] list not worked out ({exc!r}); keeping the last one", flush=True)
             return state()
-    sig, names_sig = _menu_signature(items), _signature(names)
+    sig = _menu_signature({"stores": stores, "offers": offers} if stores is not None else None)
+    names_sig = _signature(names)
     with _LOCK:
         st = state()
         changed = []
         if st.get("sig", "off") != sig:
-            st.update(rev=_next_rev(st.get("rev")), sig=sig, entries=items or [])
+            st.update(rev=_next_rev(st.get("rev")), sig=sig,
+                      entries=stores or [], offers=offers or [])
             changed.append("menu")
         if st.get("names_sig", "off") != names_sig:
             st.update(names_rev=_next_rev(st.get("names_rev")), names_sig=names_sig, names=names or {})
@@ -546,8 +599,9 @@ def refresh(now=None) -> dict:
             json.dump(st, fh, indent=1)
         os.replace(tmp, _state_path())
     if "menu" in changed:
-        print(f"[captain-menu] rev {st['rev']}: " + (", ".join(e["name"] for e in st["entries"]) or "(none)")
-              if sig != "off" else f"[captain-menu] rev {st['rev']}: off, shipped menu", flush=True)
+          print(f"[king-menu] rev {st['rev']}: {len(st['entries'])} store(s), "
+              f"{len(st['offers'])} item(s)" if sig != "off"
+              else f"[king-menu] rev {st['rev']}: off, shipped menu", flush=True)
     if "names" in changed:
         print(f"[captain-menu] store names rev {st['names_rev']}: {len(st['names'])} store(s) renamed"
               if names_sig != "off" else f"[captain-menu] store names rev {st['names_rev']}: Global's", flush=True)
@@ -601,7 +655,7 @@ def built_pack(*roots) -> tuple[str, dict] | None:
     path = os.path.join(cache_dir(), f"captain-{st['sig']}-{os.path.basename(src)}")
     with _LOCK:
         if not os.path.isfile(path):
-            info = build_pack(src, st["entries"], path)
+            info = build_pack(src, st.get("offers") or [], path)
             for old in glob.glob(os.path.join(cache_dir(), "captain-*.cpk")):
                 if old != path:
                     os.remove(old)
@@ -635,10 +689,10 @@ def serve(rel: str, *roots) -> tuple[bytes | None, str | None]:
         built = None
     if built:
         with open(built[0], "rb") as fh:
-            return fh.read(), (f"Farplane pack with the Captain's menu ({len(built[1]['entries'])} exchanges, "
-                               f"rev {built[1]['rev']})")
+            return fh.read(), (f"Farplane pack with King Mog Item Exchange "
+                               f"({len(built[1].get('offers') or [])} items, rev {built[1]['rev']})")
     src = source_pack(*roots)
     if not src:
         return None, None
     with open(src, "rb") as fh:
-        return fh.read(), f"Farplane pack {os.path.basename(src)} (the Captain's menu not rebuilt)"
+        return fh.read(), f"Farplane pack {os.path.basename(src)} (King Mog menu not rebuilt)"
