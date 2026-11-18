@@ -242,10 +242,13 @@ class Handler(BaseHTTPRequestHandler):
         # Mitra) load through the same request: serve the carrier without an
         # encounter, keyed outside `<reply_id>@<mid>` so the pipeline never treats
         # it as a mission load (no attempt, drops or save change). An id in no
-        # known table is still served that way, but logged loudly.
-        menu_resource = battle_content.is_menu_resource_row(mission_row(mid)) if mid else False
+        # known table is still served that way, unless its event encounter is explicitly indexed.
+        row = mission_row(mid) if mid else None
+        menu_resource = battle_content.is_menu_resource_row(row) if mid else False
+        indexed_event_encounter = row is None and bool(mid and battle_content.event_encounter(mid))
         no_encounter = (spec is None and mid and reply_id == BATTLE_BUNDLE_REPLY_ID
-                        and reply_id in State.replies and (mission_row(mid) is None or menu_resource))
+                and reply_id in State.replies
+                and ((row is None and not indexed_event_encounter) or menu_resource))
         if no_encounter:
             kind = "menu-resource" if menu_resource else "map-event" if is_map_event(mid) else "town" if is_town(mid) else "unrecognised"
             if kind == "unrecognised":

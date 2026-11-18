@@ -2,6 +2,10 @@
 
 Each entry is one update to this repo. To update: in your repo folder run `git pull`, then from `ios-server` run `docker compose build && docker compose up -d`. Your save isn't touched. Open the game twice afterwards so it picks up the new data.
 
+## 2026-11-18: Archived Vortex encounter routing
+
+- Vortex events with an indexed encounter but no mission master row now load their battle bundle instead of falling back to a non-combat event response. This fixes the Dread Frost Arrives entry.
+
 ## 2026-11-17: Trial checkpoint rewards and party equipment
 
 - Clearing a Trial checkpoint now awards 50,000 Lapis once, after all trials in that checkpoint group are cleared. Previously completed checkpoints are not paid retroactively.
