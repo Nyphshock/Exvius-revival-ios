@@ -20,6 +20,21 @@ _VORTEX_TABS = None
 _ENHANCE_AREAS = None
 REPLAY_LOOKBACK_DAYS = 14   # first replay week: events still running when the replay starts
 
+# Area 906 is also the client's Book of Memories entry. Keep that native destination intact and give
+# Dread Frost Arrives a separate client-side area ID so its Vortex gate opens the event missions.
+CLIENT_AREA_ALIASES = {'906': '99999999'}
+CLIENT_AREA_ALIAS_TEMPLATES = {'906': '899'}
+CLIENT_AREA_ALIAS_MISSIONS = {'906': ('9000406', '9000407', '9000408')}
+
+
+def client_gate_row(row):
+    """Use a non-colliding client area ID for archived events whose native area was repurposed."""
+    out = dict(row)
+    area = str(out.get('uv60hgDW') or '')
+    if area in CLIENT_AREA_ALIASES:
+        out['uv60hgDW'] = CLIENT_AREA_ALIASES[area]
+    return out
+
 # The archive has no Global release field for these recurring/legacy Vortex areas.
 # Unknown non-permanent events are hidden for gated profiles unless dated here or
 # in event_history.json / content/event_quest_dates.json.

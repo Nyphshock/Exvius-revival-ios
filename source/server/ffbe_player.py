@@ -3295,6 +3295,9 @@ def serve_event_gate(spec, reply_id):
         schedules.extend({'fSxqkF10': bid, 'VjJQ51uG': windows[bid]['VjJQ51uG'],
                           'm8ivD4NX': windows[bid]['m8ivD4NX']} for bid in sorted(windows))
         spec['jBL5XNf6'] = schedules
+    from event_archive import client_gate_row
+    spec[EVENT_GATE_TAG] = [client_gate_row(row) if isinstance(row, dict) else row
+                            for row in spec.get(EVENT_GATE_TAG, [])]
     return spec
 
 

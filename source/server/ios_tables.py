@@ -255,6 +255,12 @@ def table_bump(spec, *roots) -> int:
         return 1001     # 1000: first build (v900 address); raise it whenever the served rows change
     if spec == MISSION:
         import reward_overrides
+        import event_archive
+        if event_archive.CLIENT_AREA_ALIASES:
+            signature = (reward_overrides.signature() if reward_overrides.enabled() else '')
+            aliases = json.dumps((event_archive.CLIENT_AREA_ALIASES,
+                                  event_archive.CLIENT_AREA_ALIAS_MISSIONS), sort_keys=True)
+            return 4000 + zlib.crc32((spec[0] + signature + aliases).encode()) % 1000
         rewards_bump = (1000 + zlib.crc32((spec[0] + reward_overrides.signature()).encode()) % 1000
                         if reward_overrides.enabled() else 0)
         # Stay above the prior first-clear-only version so cached clients fetch the checkpoint-gated rows.
@@ -286,7 +292,11 @@ def table_bump(spec, *roots) -> int:
     if spec == AREA:
         import vortex_order
         order = vortex_order.priorities()
-        return 1000 + zlib.crc32(json.dumps(order, sort_keys=True).encode()) % 1000 if order else 0
+        if order:
+            import event_archive
+            floor = 2000 if event_archive.CLIENT_AREA_ALIASES else 1000
+            return floor + zlib.crc32(json.dumps(order, sort_keys=True).encode()) % 1000
+        return 0
     if spec in (FUNCTION, SWITCH):
         return 1001
     return 0
@@ -463,12 +473,18 @@ def esper_checkpoint_switches(mission_rows: list[dict]) -> dict[str, list[str]]:
 def patch_mission_table(raw: bytes) -> tuple[bytes, int, int]:
     """Patch first-clear rewards and add checkpoint switch requirements in one pass."""
     import reward_overrides
+    import event_archive
     rows = list(_rows(raw, MISSION[2]))
     checkpoint_switches = esper_checkpoint_switches([row for _, row, _ in rows])
     out, changed = [], 0
     gated = 0
     for line, row, double in rows:
         updated = dict(row)
+        area = str(row.get("uv60hgDW") or "")
+        mission = str(row.get("qo3PECw6") or "")
+        alias = event_archive.CLIENT_AREA_ALIASES.get(area)
+        if alias and mission in event_archive.CLIENT_AREA_ALIAS_MISSIONS.get(area, ()):
+            updated["uv60hgDW"] = alias
         value = str(row.get("1x4bG2J8") or "")
         new = reward_overrides.first_clear(row.get("qo3PECw6"), value) if reward_overrides.for_mission(
             row.get("qo3PECw6")) else value
@@ -639,14 +655,39 @@ def patch_select_units(raw: bytes) -> tuple[bytes, int]:
 def patch_area_order(raw: bytes) -> tuple[bytes, int]:
     """`F_AREA_MST` with the Vortex's event areas' priorities (`Z0EN6jSh`) from vortex_order.priorities."""
     import vortex_order
+    import event_archive
     order = vortex_order.priorities()
+    rows = list(_rows(raw, AREA[2]))
     out, changed = [], 0
-    for line, row, double in _rows(raw, AREA[2]):
+    have = {str(row.get("uv60hgDW") or "") for _, row, _ in rows}
+    for line, row, double in rows:
         prio = order.get(str(row.get("uv60hgDW")))
         if prio is not None and str(row.get("Z0EN6jSh")) != str(prio):
             line = _encrypt(AREA[2], dict(row, Z0EN6jSh=str(prio)), double)
             changed += 1
         out.append(line)
+    for source, alias in event_archive.CLIENT_AREA_ALIASES.items():
+        if alias in have:
+            continue
+        template_area = event_archive.CLIENT_AREA_ALIAS_TEMPLATES.get(source)
+        template = next(((row, double) for _, row, double in rows
+                         if str(row.get("uv60hgDW") or "") == str(template_area)), None)
+        event = next((row for row in event_archive.events() if str(row.get("area")) == source), None)
+        if template is None or event is None:
+            continue
+        row, double = template
+        from player_state import _load_ndjson
+        dungeon = _load_ndjson("F_DUNGEON_MST.ndjson", "U9iHsau3").get(
+            str(event.get("first_dungeon") or ""), {})
+        destination = str(dungeon.get("0HUPxDf1") or "")
+        if not destination:
+            continue
+        alias_row = dict(row, uv60hgDW=alias, G4L0YIB2=str(event.get("name") or "Dread Frost Arrives"),
+                         Z0EN6jSh=str(order.get(alias, order.get(source, row.get("Z0EN6jSh") or "0"))),
+                         **{"0HUPxDf1": destination})
+        alias_row["RB8zTc9G"] = ""
+        out.append(_encrypt(AREA[2], alias_row, double))
+        changed += 1
     return ("\n".join(out) + "\n").encode("ascii"), changed
 
 

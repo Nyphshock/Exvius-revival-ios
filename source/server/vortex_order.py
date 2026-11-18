@@ -64,4 +64,7 @@ def priorities() -> dict:
             group.sort(key=lambda r: int(r['area']))
         for n, row in enumerate(group):
             out.setdefault(str(row['area']), t * TIER + n)
+    for source, alias in event_archive.CLIENT_AREA_ALIASES.items():
+        if source in out:
+            out[alias] = out[source]
     return out
