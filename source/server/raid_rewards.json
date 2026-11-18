@@ -4,17 +4,21 @@
     {
       "event_id": "905",
       "dungeon_id": "90005",
-      "dungeon_ids": ["90005"],
+      "dungeon_ids": ["90005", "90006"],
       "name": "A Frosty Offensive",
       "menu_label": "A Frosty Offensive",
       "menu_background": "event_905.png",
+      "report_banner_url": "https://static.wikia.nocookie.net/exvius_gamepedia_en/images/8/86/Banner-A_Frosty_Offensive.png/revision/latest?cb=20161223070828",
       "reward_banner_id": "0",
       "source_url": "https://exvius.fandom.com/wiki/A_Frosty_Offensive",
       "mission_points": {
         "9000402": 15,
         "9000403": 40,
         "9000404": 90,
-        "9000405": 160
+        "9000405": 160,
+        "9000406": 60,
+        "9000407": 126,
+        "9000408": 240
       },
       "level_bonus_percent": 0,
       "show_solo_level": false,

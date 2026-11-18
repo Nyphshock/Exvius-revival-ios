@@ -6,7 +6,7 @@ Each entry is one update to this repo. To update: in your repo folder run `git p
 
 - Vortex events with an indexed encounter but no mission master row now load their battle bundle instead of falling back to a non-combat event response.
 - Dread Frost Arrives now uses a separate client area for its Vortex gate, dungeon and three missions; the original area 906 remains the Book of Memories entry.
-- A Frosty Offensive now tracks its individual event points and milestone rewards; its News entry opens a per-profile progress report, with 50,000 Lapis replacing the final Trust Moogle.
+- A Frosty Offensive now appears under Events News with live points and mailed-reward count. Its report uses the original banner, strikes through milestones sent to the mailbox, and awards exactly 50,000 Lapis at 12,000 points.
 
 ## 2026-11-17: Trial checkpoint rewards and party equipment
 

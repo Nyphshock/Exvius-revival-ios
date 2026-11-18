@@ -410,16 +410,26 @@ def rows() -> list[dict]:
 def _frosty_reward_notice(current: int) -> dict | None:
     """Persistent News entry for this profile's A Frosty Offensive point ledger."""
     from exvius_raid_progress import personal_event
+    from ffbe_state import State
     event = personal_event(dungeon_id='90005')
     if event is None:
         return None
+    saved = {}
+    if State.player is not None:
+        saved = ((State.player.data.get('exvius_raid_progress') or {}).get('personal_events') or {}).get(
+            str(event['event_id']), {})
+    points = int(saved.get('points') or 0)
+    mailed = set(saved.get('mailed_milestones') or [])
+    milestones = event.get('personal_milestones') or []
+    delivered = sum(int(milestone['points']) in mailed for milestone in milestones)
     _moment_value, start = _moment(current)
     begin = start.strftime('%Y-%m-%d %H:%M:%S')
     notice_index = FROSTY_NOTICE_OFFSET + int(event['event_id'])
     return {
         'td06MKEX': str(NOTICE_ID_BASE + notice_index),
-        '5GNraZM0': '0', 'i4Bb9ySk': '1', '1fKgZk2I': '1',
-        '15Y3fBmF': json.dumps({'en': event['name'] + ': Points & Rewards'}, ensure_ascii=False),
+        '5GNraZM0': '0', 'i4Bb9ySk': '2', '1fKgZk2I': '1',
+            '15Y3fBmF': json.dumps({'en': f"{event['name']}: {points:,} pts, "
+                              f"{delivered}/{len(milestones)} rewards"}, ensure_ascii=False),
         'w7VR6ypY': str(current),
         '1d8R5ajV': begin, 'VjJQ51uG': begin, 'm8ivD4NX': '2099-12-31 23:59:59',
         'o6n5aQ8C': begin, '9miE75sp': (start + timedelta(days=7)).strftime('%Y-%m-%d %H:%M:%S'),

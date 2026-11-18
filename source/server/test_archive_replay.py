@@ -1,4 +1,5 @@
 from datetime import date, datetime, timedelta
+import json
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -329,7 +330,10 @@ class FrostyOffensiveRewardsTests(unittest.TestCase):
             event = exvius_raid_progress.personal_event(mission_id="9000402")
 
         self.assertEqual(event["mission_points"], {
-            "9000402": 15, "9000403": 40, "9000404": 90, "9000405": 160})
+            "9000402": 15, "9000403": 40, "9000404": 90, "9000405": 160,
+            "9000406": 60, "9000407": 126, "9000408": 240})
+        self.assertEqual(exvius_raid_progress.personal_event(dungeon_id="90006"), event)
+        self.assertEqual(exvius_raid_progress.personal_event(mission_id="9000406"), event)
         final = event["personal_milestones"][-1]
         self.assertEqual(final["points"], 12000)
         self.assertEqual(final["reward"], {"kind": 50, "id": 1, "count": 50000})
@@ -403,13 +407,22 @@ class FrostyOffensiveRewardsTests(unittest.TestCase):
         self.assertTrue(player.mails[0]["lapis_multiplier_exempt"])
 
     def test_frosty_news_notice_opens_personal_report(self):
-        event = {"event_id": "905", "dungeon_id": "90005", "name": "A Frosty Offensive"}
+        event = {"event_id": "905", "dungeon_id": "90005", "name": "A Frosty Offensive",
+                 "personal_milestones": [{"points": 10}, {"points": 20},
+                                          {"points": 40}, {"points": 60}]}
+        player = SimpleNamespace(data={"exvius_raid_progress": {"personal_events": {
+            "905": {"points": 60, "mailed_milestones": [10, 20]},
+        }}})
         start = datetime(2026, 11, 18)
         with patch("exvius_raid_progress.personal_event", return_value=event), \
+                patch("ffbe_state.State.player", player), \
                 patch.object(replay_notices, "_moment", return_value=(start, start)):
             notice = replay_notices._frosty_reward_notice(42)
 
-        self.assertIn("A Frosty Offensive", notice["15Y3fBmF"])
+        caption = json.loads(notice["15Y3fBmF"])["en"]
+        self.assertIn("60 pts", caption)
+        self.assertIn("2/4 rewards", caption)
+        self.assertEqual(notice["i4Bb9ySk"], "2")
         self.assertTrue(notice["1X65WPLU"].endswith("/exvius/raid-rewards/90005.html"))
 
     def test_frosty_progress_notice_is_in_the_news_rows(self):
@@ -417,34 +430,21 @@ class FrostyOffensiveRewardsTests(unittest.TestCase):
         summary = {"start": start, "from": start.date(), "to": start.date() + timedelta(days=7),
                    "finished": False, "holiday": None, "summons": [], "deals": [],
                    "bundles": [], "mails": [], "events": []}
-        event = {"event_id": "905", "dungeon_id": "90005", "name": "A Frosty Offensive"}
+        event = {"event_id": "905", "dungeon_id": "90005", "name": "A Frosty Offensive",
+                 "personal_milestones": []}
         with patch.object(gacha_rotation, "week", return_value=(42, start, start + timedelta(days=7))), \
                 patch.object(replay, "anchor_week", return_value=0), \
                 patch.object(replay_notices, "_weeks_listed", return_value=1), \
                 patch.object(replay_notices, "week_summary", return_value=summary), \
                 patch.object(replay_notices, "_moment", return_value=(start, start)), \
+                patch("ffbe_state.State.player", None), \
                 patch("exvius_raid_progress.personal_event", return_value=event):
             notices = replay_notices.rows()
 
         frosty = next(row for row in notices if row["td06MKEX"] == "890905")
         self.assertIn("A Frosty Offensive", frosty["15Y3fBmF"])
+        self.assertEqual(frosty["i4Bb9ySk"], "2")
         self.assertTrue(frosty["1X65WPLU"].endswith("/exvius/raid-rewards/90005.html"))
-
-    def test_frosty_progress_notice_is_added_to_news_rows(self):
-        start = datetime(2026, 11, 18)
-        summary = {"start": start, "from": start.date(), "to": start.date() + timedelta(days=7),
-                   "finished": False, "holiday": None, "summons": [], "deals": [],
-                   "bundles": [], "mails": [], "events": []}
-        event = {"event_id": "905", "dungeon_id": "90005", "name": "A Frosty Offensive"}
-        with patch.object(gacha_rotation, "week", return_value=(0, start, start + timedelta(days=7))), \
-                patch.object(replay, "anchor_week", return_value=0), \
-                patch.object(replay_notices, "week_summary", return_value=summary), \
-                patch("exvius_raid_progress.personal_event", return_value=event):
-            notices = replay_notices.rows()
-
-        notice = next(row for row in notices if row["td06MKEX"] == "890905")
-        self.assertIn("A Frosty Offensive", notice["15Y3fBmF"])
-        self.assertTrue(notice["1X65WPLU"].endswith("/exvius/raid-rewards/90005.html"))
 
     def test_frosty_report_shows_banner_current_points_and_delivered_rewards(self):
         player = SimpleNamespace(data={"exvius_raid_progress": {"personal_events": {
@@ -454,9 +454,11 @@ class FrostyOffensiveRewardsTests(unittest.TestCase):
             page = exvius_raid_progress.personal_rewards_page(player, "90005")
 
         self.assertIn("/en/sd/area/event_905.png", page)
+        self.assertIn("Banner-A_Frosty_Offensive.png", page)
         self.assertIn("1,234", page)
         self.assertIn("X-Potion (10)", page)
-        self.assertIn("Delivered to mailbox", page)
+        self.assertIn("Sent to mailbox", page)
+        self.assertIn("text-decoration:line-through", page)
         self.assertIn("Lapis (50,000)", page)
 
     def test_removed_evergreen_summons_are_hidden_and_not_unlocked(self):

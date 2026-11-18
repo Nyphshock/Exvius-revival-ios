@@ -376,24 +376,33 @@ def personal_rewards_page(player, dungeon_id):
     level = int(saved.get('shared_damage', 0)) // event['solo_pacing']['shared_hp_per_level'] + 1
     rows = ''.join('<tr class="%s"><td>%s</td><td>%s%s</td></tr>' % (
         'delivered' if m['points'] in mailed else '', format(m['points'], ','), escape(m['label']),
-        '<small>Delivered to mailbox</small>' if m['points'] in mailed else '')
+        '<small>Sent to mailbox</small>' if m['points'] in mailed else '')
         for m in event['personal_milestones'])
     banner_file = str(event.get('menu_background') or '')
-    banner = (f'<img class="banner" src="/en/sd/area/{escape(quote(banner_file), quote=True)}" '
-              f'alt="{escape(event["name"], quote=True)}" width="640" height="240">') if banner_file else ''
+    fallback = '/en/sd/area/' + quote(banner_file) if banner_file else ''
+    banner_url = str(event.get('report_banner_url') or fallback)
+    onerror = (f' onerror="this.onerror=null;this.src=\'{escape(fallback, quote=True)}\'"'
+               if fallback and banner_url != fallback else '')
+    banner = (f'<img class="banner" src="{escape(banner_url, quote=True)}" '
+              f'alt="{escape(event["name"], quote=True)}" width="640" height="240"{onerror}>') \
+        if banner_url else ''
     progress = '<p>Event points: <strong>' + format(points, ',') + '</strong>'
     if event.get('show_solo_level', True):
         progress += '<br>Solo raid level: <strong>' + str(level) + '</strong>'
     progress += '</p>'
-    return ('''<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>Raid Rewards</title>
-<style>body{margin:0;padding:14px;background:#081d43;color:#fff;font:16px Arial,sans-serif}
-h1{font-size:21px;color:#ffe398;margin:0 0 12px}p{line-height:1.5}strong{color:#ffe398}
-.banner{display:block;width:100%;height:auto;margin:0 0 12px;border-radius:4px}
-table{border-collapse:collapse;width:100%;background:#0d2d58}th,td{text-align:left;padding:12px 9px;border:1px solid #4b6990}
-th{background:#194875;color:#ffe398}td:first-child{white-space:nowrap}.delivered{background:#173f48}
-small{display:block;color:#a9e9cb;margin-top:5px}</style></head><body><h1>''' +
-        banner + '<h1>' + escape(event['name']) + '</h1>' + progress +
-        '<p>Milestone rewards are delivered to your mailbox.</p>' +
-        '<table><thead><tr><th>Points</th><th>Reward</th></tr></thead><tbody>' + rows +
-        '</tbody></table></body></html>')
+    return (
+        '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width,initial-scale=1">'
+        '<title>Raid Rewards</title>'
+        '<style>body{margin:0;padding:14px;background:#081d43;color:#fff;font:16px Arial,sans-serif}'
+        'h1{font-size:21px;color:#ffe398;margin:0 0 12px}p{line-height:1.5}strong{color:#ffe398}'
+        '.banner{display:block;width:100%;height:auto;margin:0 0 12px;border-radius:4px}'
+        'table{border-collapse:collapse;width:100%;background:#0d2d58}'
+        'th,td{text-align:left;padding:12px 9px;border:1px solid #4b6990}'
+        'th{background:#194875;color:#ffe398}td:first-child{white-space:nowrap}'
+        '.delivered{background:#173f48}.delivered td:last-child{text-decoration:line-through;color:#a9e9cb}'
+        'small{display:block;color:#a9e9cb;margin-top:5px}</style></head><body>'
+        + banner + '<h1>' + escape(event['name']) + '</h1>' + progress
+        + '<p>Milestone rewards are sent to your mailbox.</p>'
+        + '<table><thead><tr><th>Points</th><th>Reward</th></tr></thead><tbody>' + rows
+        + '</tbody></table></body></html>')
