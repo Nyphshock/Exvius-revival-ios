@@ -1,5 +1,6 @@
 import unittest
 import json
+import struct
 from unittest.mock import patch
 
 import ios_tables
@@ -108,29 +109,51 @@ class MissionTableEsperGateTests(unittest.TestCase):
 
 
 class StoreItemStockFilterTests(unittest.TestCase):
-    def test_removes_only_exhausted_medal_rows_and_preserves_encrypted_bytes(self):
-        raw = b"ordinary\r\nexhausted\navailable"
+    def test_native_store_index_sidecar_is_served_through_ios_tables(self):
+        self.assertTrue(ios_tables.wants(ios_tables.STORE_ITEMS_INDEX))
+
+    def test_groups_only_eligible_medal_rows_under_the_king_store(self):
+        raw = b"medal-a\nordinary\r\nmedal-b\n"
         decoded = [
-            {"YWF08vZS": "20", "6uIYE15X": "100"},
-            {"YWF08vZS": "50", "6uIYE15X": "70701"},
-            {"YWF08vZS": "50", "6uIYE15X": "70702"},
+            {"Z20mNDvL": "900108", "YWF08vZS": "50", "6uIYE15X": "70701"},
+            {"Z20mNDvL": "900109", "YWF08vZS": "20", "6uIYE15X": "100"},
+            {"Z20mNDvL": "900110", "YWF08vZS": "50", "6uIYE15X": "70702"},
         ]
 
-        filtered, removed = ios_tables.filter_store_item_rows(raw, decoded, {"70701"})
+        index = ios_tables.store_item_index(raw, decoded, 378, 900109, {"70701"})
+        count = struct.unpack_from("<H", index, 8)[0]
+        offset = 10 + count * 12
+        group_count = struct.unpack_from("<H", index, offset)[0]
+        offset += 2
+        groups = {}
+        for _ in range(group_count):
+            key, member_count = struct.unpack_from("<iH", index, offset)
+            offset += 6
+            groups[key] = list(struct.unpack_from("<" + "i" * member_count, index, offset))
+            offset += 4 * member_count
 
-        self.assertEqual(filtered, b"ordinary\r\navailable")
-        self.assertEqual(removed, 1)
+        self.assertEqual(index[:4], bytes.fromhex("0000beff"))
+        self.assertEqual(index[-4:], bytes.fromhex("beff0000"))
+        self.assertEqual(groups[900109], [0])
+        self.assertEqual(groups[900110], [2])
 
-    def test_exhausted_rows_force_a_stable_store_master_version(self):
-        with patch("exvius_shop_catalogue.exhausted_medal_rows", return_value={"70701", "70702"}):
+    def test_eligible_offers_force_a_stable_store_master_version(self):
+        offers = [
+            {"store": "900108", "medal": "70701", "currency": "106300400"},
+            {"store": "900109", "medal": "70702", "currency": "106300500"},
+        ]
+        with patch("captain_menu.state", return_value={"offers": offers}):
             first = ios_tables.table_bump(ios_tables.STORE_ITEMS)
-        with patch("exvius_shop_catalogue.exhausted_medal_rows", return_value={"70702", "70701"}):
+        with patch("captain_menu.state", return_value={"offers": offers}):
             second = ios_tables.table_bump(ios_tables.STORE_ITEMS)
-        with patch("exvius_shop_catalogue.exhausted_medal_rows", return_value=set()):
+        with patch("captain_menu.state", return_value={"offers": list(reversed(offers))}):
+            reordered = ios_tables.table_bump(ios_tables.STORE_ITEMS)
+        with patch("captain_menu.state", return_value={"offers": []}):
             none = ios_tables.table_bump(ios_tables.STORE_ITEMS)
 
         self.assertGreaterEqual(first, 100000)
         self.assertEqual(first, second)
+        self.assertNotEqual(first, reordered)
         self.assertEqual(none, 0)
 
 

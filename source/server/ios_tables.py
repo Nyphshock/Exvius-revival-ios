@@ -67,7 +67,9 @@ import glob
 import json
 import os
 import re
+import struct
 import zlib
+from collections import defaultdict
 
 # (name, token, key) of each table, from libgame's `F_NAME\0token\0key\0` triplets.
 RESOURCE = ("F_RESOURCE_MST", "ZQqB38Ns", "u6q3F02d")
@@ -89,6 +91,7 @@ AREA = ("F_AREA_MST", "Fvix6V0n", "pR2DHS6i")
 FUNCTION = ("F_FUNCTION_MST", "6wibj9m8", "sy6GRuY2")
 SWITCH = ("F_SWITCH_MST", "T46RpNZH", "AUx51pni")
 STORE_ITEMS = ("F_STORE_ITEM_MST", "03cY9vXe", None)
+STORE_ITEMS_INDEX = "mst/03cY9vXe.i"
 # Map pack sizes (`JwbkKrjA`, the common_lang file; ResourceSizeMst). The Farplane pack's row gets the size of
 # the pack actually served, or the phone downloads it again on every visit (captain_menu.served_size, 2026-11-10).
 # The second column (`mYtcPkQQ`) is never read by the game (the name isn't in libgame).
@@ -241,9 +244,11 @@ def art(*roots):
 def table_bump(spec, *roots) -> int:
     import sound_compat
     if spec == STORE_ITEMS:
-        from exvius_shop_catalogue import exhausted_medal_rows
-        exhausted = sorted(exhausted_medal_rows())
-        return 100000 + zlib.crc32(",".join(exhausted).encode()) % 100000 if exhausted else 0
+        import captain_menu
+        offers = captain_menu.state().get("offers") or []
+        signature = [(str(row.get("store")), str(row.get("medal")), str(row.get("currency")))
+                     for row in offers]
+        return 100000 + zlib.crc32(json.dumps(signature, sort_keys=True).encode()) % 100000 if offers else 0
     if spec == RESOURCE_VERSION:
         built = art(*roots)
         return sound_bump() + (built[1] if built else 0)
@@ -346,7 +351,8 @@ def _path(token: str):
 
 def wants(rel: str) -> bool:
     import ios_texts, ios_art, story_text, captain_menu
-    return (_which(rel) is not None or ios_texts.wants(rel) or ios_art.wants(rel) or story_text.wants(rel)
+    return (bool(re.search(r"(^|/)mst/03cY9vXe\.i$", rel)) or _which(rel) is not None
+            or ios_texts.wants(rel) or ios_art.wants(rel) or story_text.wants(rel)
             or captain_menu.wants(rel))
 
 
@@ -404,18 +410,63 @@ def _encrypt(key_text: str, row: dict, double: bool) -> str:
                        double_pad=double)
 
 
-def filter_store_item_rows(raw: bytes, decoded_rows: list[dict], exhausted: set[str]) -> tuple[bytes, int]:
-    """Drop exhausted medal offers while preserving remaining encrypted rows byte-for-byte."""
+def store_item_index(raw: bytes, decoded_rows: list[dict], version: int,
+                     king_store: int | None = None, offer_ids: set[str] | None = None) -> bytes:
+    """Build the native seek index, optionally grouping eligible medal rows under King Mog's store ID."""
     encoded_rows = raw.splitlines(keepends=True)
     if len(encoded_rows) != len(decoded_rows):
         raise ValueError(f"store item master row mismatch: {len(encoded_rows)} raw vs {len(decoded_rows)} decoded")
-    kept, removed = [], 0
-    for encoded, row in zip(encoded_rows, decoded_rows):
-        if str(row.get("YWF08vZS")) == "50" and str(row.get("6uIYE15X")) in exhausted:
-            removed += 1
-        else:
-            kept.append(encoded)
-    return b"".join(kept), removed
+    direct, groups = [], defaultdict(list)
+    offset = 0
+    eligible = []
+    offer_ids = {str(iid) for iid in offer_ids or ()}
+    for ordinal, (line, row) in enumerate(zip(encoded_rows, decoded_rows)):
+        body = line.rstrip(b"\r\n")
+        direct.append((ordinal, offset, len(body)))
+        groups[int(row["Z20mNDvL"])].append(ordinal)
+        if (king_store is not None and str(row.get("YWF08vZS")) == "50"
+                and str(row.get("6uIYE15X")) in offer_ids):
+            eligible.append(ordinal)
+        offset += len(line)
+    if king_store is not None and eligible:
+        groups[int(king_store)] = sorted(set(eligible))
+
+    def short_count(count):
+        if not 0 <= count <= 65535:
+            raise ValueError(f"store item index count outside uint16: {count}")
+        return struct.pack("<H", count)
+
+    out = bytearray(bytes.fromhex("0000beff") + struct.pack("<I", int(version)) + short_count(len(direct)))
+    for ordinal, start, size in direct:
+        out += struct.pack("<iII", ordinal, start, size)
+    out += short_count(len(groups))
+    for group, members in sorted(groups.items()):
+        out += struct.pack("<i", group) + short_count(len(members))
+        out += struct.pack("<" + "i" * len(members), *members)
+    return bytes(out) + bytes.fromhex("beff0000")
+
+
+def store_item_index_reply(*roots) -> tuple[bytes | None, str | None]:
+    """The native `.i` sidecar, with this player's available medal rows grouped under King Mog's store."""
+    import captain_menu
+    st = captain_menu.state()
+    offers = st.get("offers") or []
+    schedule = captain_menu.item_exchange_schedule()
+    if not offers or not schedule:
+        return None, None
+    src = source_table(*roots, token=STORE_ITEMS[1])
+    if not src:
+        return None, None
+    version = int(re.search(r"Ver(\d+)_", os.path.basename(src)).group(1))
+    from data_paths import MST_DIR
+    decoded_path = os.path.join(MST_DIR, "F_STORE_ITEM_MST.ndjson")
+    with open(decoded_path, encoding="utf-8") as source:
+        rows = [json.loads(line) for line in source if line.strip()]
+    raw = open(src, "rb").read()
+    data = store_item_index(raw, rows, version, int(schedule["za2xsDj5"]),
+                            {str(row["medal"]) for row in offers})
+    return data, (f"F_STORE_ITEM_MST index, King Mog store {schedule['za2xsDj5']}, "
+                  f"{len(offers)} available item(s)")
 
 
 def patch_challenges(raw: bytes) -> tuple[bytes, int]:
@@ -794,6 +845,12 @@ def patch_versions(raw: bytes, spec, ids: set[str], bump: int, sets=None,
 def serve(rel: str, *roots: str | None) -> tuple[bytes | None, str | None]:
     """(table bytes, CDN log note) when `rel` is one of the tables served patched, else (None, None)."""
     import ios_texts, ios_art, story_text, captain_menu
+    if re.search(r"(^|/)mst/03cY9vXe\.i$", rel):
+        try:
+            return store_item_index_reply(*roots)
+        except Exception as exc:  # noqa: BLE001 -- preserve the original sidecar on failure
+            print(f"[king-menu] store index not built ({exc!r})", flush=True)
+            return None, None
     if ios_texts.wants(rel):
         return ios_texts.serve(rel, *roots)
     if story_text.wants(rel):
@@ -819,14 +876,7 @@ def serve(rel: str, *roots: str | None) -> tuple[bytes | None, str | None]:
         return None, None
     try:
         if spec == STORE_ITEMS:
-            from data_paths import MST_DIR
-            from exvius_shop_catalogue import exhausted_medal_rows
-            decoded_path = os.path.join(MST_DIR, "F_STORE_ITEM_MST.ndjson")
-            with open(decoded_path, encoding="utf-8") as source:
-                decoded_rows = [json.loads(line) for line in source if line.strip()]
-            data, removed = filter_store_item_rows(open(src, "rb").read(), decoded_rows,
-                                                   exhausted_medal_rows())
-            return data, f"{os.path.basename(src)}, {removed} exhausted medal offer(s) hidden for this player"
+            return open(src, "rb").read(), f"{os.path.basename(src)}, original rows retained; King Mog index supplies the filtered store view"
         if spec == RESOURCE:
             drop = set()
             if drop_unversioned():

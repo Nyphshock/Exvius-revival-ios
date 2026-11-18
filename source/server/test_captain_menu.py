@@ -93,31 +93,21 @@ class CaptainMenuTests(unittest.TestCase):
         options = [int.from_bytes(payload[1 + 5 * index:5 + 5 * index], "big")
                    for index in range(payload[0])]
         stores = [int.from_bytes(data, "big") for _, command, data in captain_menu._commands(
-            body, labels[2], labels[-1]) if command == 0x44]
+            body, labels[1], labels[-1]) if command == 0x44]
 
         self.assertEqual(options, [captain_menu.TEXT_ITEM_EXCHANGE, captain_menu.LEAVE_TEXT])
-        self.assertEqual(stores, [900108, 900109])
+        self.assertEqual(stores, [captain_menu.KING_STORE])
 
-    def test_flat_item_menu_paginates_products_three_at_a_time(self):
-        items = [{"store": str(900108 + index), "currency": str(106300400 + index),
-                  "name": "Item " + str(index)} for index in range(4)]
-        labels, body = captain_menu.script(items)
-        first_page = captain_menu._commands(body, labels[1], labels[2])
-        second_page = captain_menu._commands(body, labels[2], labels[3])
+    def test_native_item_exchange_schedule_uses_canonical_store_currency(self):
+        with patch.object(captain_menu, "state", return_value={"offers": [
+            {"store": "900109", "currency": "106300500", "name": "Item A"},
+            {"store": "900108", "currency": "106300400", "name": "Item B"},
+        ]}):
+            row = captain_menu.item_exchange_schedule()
 
-        def choices(commands):
-            command = next(row for row in commands if row[1] == 0x15)
-            payload = command[2]
-            return [int.from_bytes(payload[1 + 5 * index:5 + 5 * index], "big")
-                    for index in range(payload[0])]
-
-        self.assertEqual(choices(first_page), [
-            captain_menu.TEXT_ENTRY, captain_menu.TEXT_ENTRY + 1, captain_menu.TEXT_ENTRY + 2,
-            captain_menu.NEXT_TEXT, captain_menu.TEXT_BACK,
-        ])
-        self.assertEqual(choices(second_page), [
-            captain_menu.TEXT_ENTRY + 3, captain_menu.TEXT_BACK,
-        ])
+        self.assertEqual(row["Z20mNDvL"], captain_menu.KING_STORE)
+        self.assertEqual(row["za2xsDj5"], "900109")
+        self.assertEqual(row["suR36Jpm"], "20:106300500")
 
     def test_menu_signature_changes_when_layout_revision_changes(self):
         entries = [{"store": "900108", "currency": "106300400", "name": "Exchange"}]

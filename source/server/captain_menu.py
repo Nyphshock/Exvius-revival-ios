@@ -82,10 +82,8 @@ CAPTAIN_NPC = 0x0BED6C90
 KING_PROMPT_SHIPPED = 110588       # "<name_npc=100002900><br>What do you want to exchange, Kupo?"
 CAPTAIN_PROMPT_SHIPPED = 110719    # "<name=200028><br>Which exchange do you want to make?"
 NEXT_TEXT, LEAVE_TEXT = 110717, 110718
-TEXT_PROMPT, TEXT_NONE, TEXT_OUT, TEXT_MOVED, TEXT_ITEM_EXCHANGE, TEXT_BACK, TEXT_LIST_PROMPT, TEXT_ENTRY = (
-    190001, 190002, 190003, 190004, 190005, 190006, 190007, 190100)
-MAX_ENTRIES = 80
-MAX_MENU_ITEMS = 189                # one-byte labels: root + pages + one open-store label per item + end
+TEXT_PROMPT, TEXT_NONE, TEXT_OUT, TEXT_MOVED, TEXT_ITEM_EXCHANGE, TEXT_ENTRY = (
+    190001, 190002, 190003, 190004, 190005, 190100)
 KING = "<name_npc=100002900><br>"
 # Map text breaks its own lines (`<br>`, about 50 characters at most in the shipped lines).
 TEXTS = {
@@ -94,8 +92,6 @@ TEXTS = {
     TEXT_OUT: KING + "You don't have any of that currency<br>left, kupo!",
     TEXT_MOVED: "All event exchanges are now available from King Mog.",
     TEXT_ITEM_EXCHANGE: "Item Exchange",
-    TEXT_BACK: "Back",
-    TEXT_LIST_PROMPT: KING + "Which item do you want, kupo?",
 }
 # Global's permanent and Dark Visions exchanges, now listed by King Mog when their currency is held.
 OWN = (
@@ -174,7 +170,7 @@ def entries(now=None, week=None) -> list:
                     "live": bool(live), "date": max(live + ran or [str(ex.get("first_run") or "")])})
         seen.add(store)
     out.sort(key=lambda e: (e["live"], e["date"], e["store"]), reverse=True)
-    return out[:MAX_ENTRIES]
+    return out
 
 
 def exchange_items(stores: list) -> list:
@@ -218,10 +214,21 @@ def exchange_items(stores: list) -> list:
                 label = reward_name + suffix
             else:
                 label = reward_name if len(reward_name) <= 34 else reward_name[:31].rstrip() + "..."
-            out.append({"store": store_id, "currency": str(store["currency"]), "name": label})
+            out.append({"store": store_id, "currency": str(store["currency"]), "medal": medal, "name": label})
             seen.add(medal)
     out.sort(key=lambda item: (item["name"].casefold(), item["store"]))
-    return out[:MAX_MENU_ITEMS]
+    return out
+
+
+def item_exchange_schedule() -> dict | None:
+    """The native King Mog screen opens one store; its index aliases all eligible medal offers into it."""
+    items = state().get("offers") or []
+    if not items:
+        return None
+    primary = items[0]
+    return {"Z20mNDvL": KING_STORE, "za2xsDj5": str(primary["store"]), "w7VR6ypY": "0",
+            "VjJQ51uG": "2020-01-01 00:00:00", "m8ivD4NX": "2099-12-31 23:59:59",
+            "suR36Jpm": "20:" + str(primary["currency"]), "89YmCAzo": "", "0euar5mZ": ""}
 
 
 # --- the script -------------------------------------------------------------------------------------------
@@ -234,43 +241,21 @@ STEP = _cmd(0x01)
 
 
 def script(items: list) -> tuple[list, bytes]:
-    """(label offsets, script bytes) of King Mog's Item Exchange flow."""
+    """King Mog's single native Item Exchange button; products are rendered by the game's store scene."""
     n = len(items)
     if not n:
         body = _cmd(0x08, struct.pack(">I", TEXT_NONE)) + STEP
         return [len(body)], body
-    pages = [list(range(i, min(i + 3, n))) for i in range(0, n, 3)]
-    k = len(pages)
-    item_start = 1 + k
-    end = item_start + n
-    page_of = {j: p + 1 for p, js in enumerate(pages) for j in js}
-    blocks = {}
-    root = bytes([2]) + struct.pack(">IB", TEXT_ITEM_EXCHANGE, 1) + struct.pack(">IB", LEAVE_TEXT, end)
-    blocks[0] = _cmd(0x15, root + struct.pack(">I", TEXT_PROMPT)) + STEP
-    for p, js in enumerate(pages):
-        options = [(TEXT_ENTRY + j, item_start + j) for j in js]
-        if p + 1 < k:
-            options.append((NEXT_TEXT, p + 2))
-        options.append((TEXT_BACK, 0))
-        data = bytes([len(options)]) + b"".join(struct.pack(">IB", t, lab) for t, lab in options)
-        blocks[p + 1] = _cmd(0x15, data + struct.pack(">I", TEXT_LIST_PROMPT)) + STEP
-    for j, item in enumerate(items):
-        back = _cmd(0x04, struct.pack(">H", page_of[j])) + STEP
-        blocks[item_start + j] = (_cmd(0x44, struct.pack(">I", int(item["store"])))
-                                  + _cmd(0x02, b"\x00\x01") + STEP + back)
-    body, labels = b"", []
-    for label in range(end):
-        labels.append(len(body))
-        body += blocks[label]
-    labels.append(len(body))      # `end`: "Do not exchange"
-    return labels, body
+    choice = (bytes([2]) + struct.pack(">IB", TEXT_ITEM_EXCHANGE, 1)
+              + struct.pack(">IB", LEAVE_TEXT, 2))
+    menu = _cmd(0x15, choice + struct.pack(">I", TEXT_PROMPT)) + STEP
+    open_store = (_cmd(0x44, struct.pack(">I", KING_STORE)) + _cmd(0x02, b"\x00\x01")
+                  + STEP + _cmd(0x04, struct.pack(">H", 0)) + STEP)
+    return [0, len(menu), len(menu) + len(open_store)], menu + open_store
 
 
 def texts(items: list) -> dict:
-    out = dict(TEXTS)
-    for j, item in enumerate(items):
-        out[TEXT_ENTRY + j] = item["name"]
-    return out
+    return dict(TEXTS)
 
 
 # --- map.bin and the text file ----------------------------------------------------------------------------

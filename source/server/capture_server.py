@@ -480,7 +480,7 @@ class Handler(BaseHTTPRequestHandler):
     # the CDN handler was first added above (it was dead code, and a CDN fetch was logged as an action call).
     def _is_store_items_fetch(self):
         rel = urllib.parse.unquote(self.path.split("?", 1)[0].lstrip("/"))
-        return bool(re.fullmatch(r"mst/Ver\d+_03cY9vXe\.dat", rel))
+        return bool(re.fullmatch(r"mst/(?:Ver\d+_03cY9vXe\.dat|03cY9vXe\.i)", rel))
 
     def _fetch_cdn(self, *, locked=False):
         if not self._is_store_items_fetch():
