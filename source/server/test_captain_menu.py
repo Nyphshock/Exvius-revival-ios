@@ -39,6 +39,24 @@ class CaptainMenuTests(unittest.TestCase):
         self.assertTrue(any("Phoenix Down" in item["name"] for item in items))
         self.assertTrue(any("Hero Ring" in item["name"] for item in items))
 
+    def test_long_event_name_does_not_truncate_item_name(self):
+        shops = SimpleNamespace(_rows=lambda *_: [
+            {"Z20mNDvL": "900108", "YWF08vZS": "50", "6uIYE15X": "70701"},
+        ])
+        stores = [{"store": "900108", "currency": "106300400", "name": "Operation MA Demolition"}]
+
+        with patch.dict(sys.modules, {"exvius_actions_shops": shops}):
+            with patch.object(exvius_shop_catalogue, "catalogue", return_value=([], [], {
+                "offer": {"medal": "70701"},
+            })):
+                with patch.object(exvius_shop_catalogue, "labels", return_value={
+                    "offer": {"name": "A recognizable item title"},
+                }):
+                    with patch.object(exvius_shop_catalogue, "exhausted_medal_rows", return_value=set()):
+                        items = captain_menu.exchange_items(stores)
+
+        self.assertEqual(items[0]["name"], "A recognizable item title")
+
     def test_king_menu_starts_with_one_item_exchange_button(self):
         items = [
             {"store": "900108", "currency": "106300400", "name": "Phoenix Down - First"},

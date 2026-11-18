@@ -1,4 +1,4 @@
-"""The Moogle Guard Captain in the Farplane as the leftover-currency merchant (operator's request, 2026-11-10).
+"""King Mog's flat Item Exchange menu in the Farplane (operator's request, 2026-11-18).
 
 ON GLOBAL (research/CAPTAIN_EXCHANGES.md): the wiki's "Farplane" page: "The Moogle Guard Captain is where you
 exchange Super Trust Moogle Exchange Tickets for a Super Trust Moogle. Additionally, Dark Matter, obtained from
@@ -11,11 +11,10 @@ Captain stores with stock in Global's tables (F_STORE_ITEM_MST). The Farplane pa
 (`common_lang/sd/map/11/Ver128_211020100.cpk`, rebuilt from the Japanese data with English text) lists 18
 exchanges in a six-page menu; 15 are Japan-only stores with no stock here.
 
-THE MENU (operator, 2026-11-13): every catalogued Global exchange with stock whose currency the player holds,
-including stores already shown by King Mog or the Mog Minister and events the replay hasn't reached yet. This
-lets the Farplane serve as a single place for leftover currency. Each option checks on the phone, when picked,
-that the player still holds the currency (the list is fixed for the session; see below) and then opens the
-exchange's own store, the way King Mog's and the Minister's counters do.
+THE MENU: King Mog's event conversation has one "Item Exchange" button, followed by a flat, alphabetized,
+paginated list of in-stock exchange items whose currency the player holds. Each item opens its original store
+with that store's currency and shared purchase count. Exhausted medal rows are omitted. The Mog Guard Captain
+and Mog Minister exchange pages redirect to King Mog instead of presenting separate event selectors.
 
 THE MAP SCRIPT (GL9 libgame). `map.bin` (CRILAYLA in the pack): int total size, int data version (0x41b), three
 ints, an int when version >= 0x3fe, an int, then `count` x (short id, string) map chips, short count x int,
@@ -28,8 +27,9 @@ script. A script command is `byte cmd, short length, data` (`MapEventData::doScr
 to a `01` (step end) or a `04` (jump) run together. Used here: 08 show text (int id), 15 choice (byte count,
 count x (int text, byte label), int prompt), 19 if items (byte mode 0 = all, byte count, count x (byte 0, byte
 item type, int id, byte at least), byte label: `MapScriptData::procIfCmd` 0x1fd0180, `GameUtils::getItemNum`
-type 20 = items), 44 open store (int store id), 02 wait (short frames), 04 jump (short label). The Captain is
-events 5, 6 and 9 of sub-map 67 (9 is the one players meet), found by the shipped menu's prompt (110719).
+type 20 = items), 44 open store (int store id), 02 wait (short frames), 04 jump (short label). King Mog's
+events 2 and 7, Mog Minister event 4, and Captain events 5, 6 and 9 are in sub-map 67. The King pages open
+base store 900104; the other exchange pages are replaced with a redirect to his Item Exchange menu.
 
 HOW IT REACHES THE PHONE. The phone keeps every pack under its `Ver<N>_` name and fetches a new one only when
 `F_RESOURCE_MAP_VERSION_MST_LOCALIZE` (served by ios_tables) names a new version, and it fetches that table at
@@ -46,7 +46,7 @@ opening it: Global's owner text names the other counter for 28 of the 67 event s
 King Mog or the Minister (Akademeia's 900107 says King Mog while the Minister runs it), and the Captain's menu
 opens King Mog's and the Minister's stores.
 `refresh` also works out `merchants` (the store King Mog shows: King Mog; the Minister's: Mog Minister; every store
-in the Captain's menu: Moogle Captain of the Guard, his name in the Farplane) with a revision of its own
+in King Mog's Item Exchange) with a revision of its own
 (`names_rev`), and ios_texts serves the two tables with those names under versions raised by it. A new week
 renames stores without the Farplane pack being downloaded again.
 
@@ -54,7 +54,7 @@ PACK SIZE. `F_RESOURCE_MAP_CHECKSUM_MST` gives the Farplane pack (290001) 4,688,
 pack we ship (5,001,656) nor the rebuilt one, and the phone downloaded the pack again on every visit. ios_tables
 serves that row with the size of the pack actually served (`served_size`).
 
-`EXVIUS_CAPTAIN_MENU=0` serves the shipped pack (the phone fetches the table once more and goes back to it).
+`EXVIUS_CAPTAIN_MENU=0` disables the custom King Mog menu and serves the shipped NPC scripts.
 """
 from __future__ import annotations
 
@@ -208,13 +208,12 @@ def exchange_items(stores: list) -> list:
             if not reward_name:
                 continue
             event_name = _short(store["name"])
-            if store_id not in own_names and event_name.lower() not in reward_name.lower():
-                suffix = " - " + event_name
-                max_reward = max(1, 34 - len(suffix))
-                reward_name = reward_name[:max_reward].rstrip()
+            suffix = " - " + event_name
+            if (store_id not in own_names and event_name.lower() not in reward_name.lower()
+                    and len(reward_name) + len(suffix) <= 34):
                 label = reward_name + suffix
             else:
-                label = reward_name[:34]
+                label = reward_name if len(reward_name) <= 34 else reward_name[:31].rstrip() + "..."
             out.append({"store": store_id, "currency": str(store["currency"]), "name": label})
             seen.add(medal)
     out.sort(key=lambda item: (item["name"].casefold(), item["store"]))
