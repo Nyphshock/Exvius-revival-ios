@@ -71,6 +71,7 @@ SCENE = "211020100"
 RESOURCE_ID = "290001"             # F_RESOURCE_MAP_MST row of 211020100.cpk
 VERSION_FIELD = "OzT5lSz3"          # base (common_lang) file version in F_RESOURCE_MAP_VERSION_MST_LOCALIZE
 VERSION_BASE = 20000
+MENU_LAYOUT_REVISION = 2
 SUBMAP = 67
 KING_NPC = 0x05F5EC54               # King Mog's sprite (sub-map 67, events 2 and 7)
 KING_STORE = 900104                 # King Mog's native store, opened by both event pages
@@ -474,6 +475,13 @@ def _signature(items) -> str:
     return hashlib.sha256(json.dumps(items, sort_keys=True).encode()).hexdigest()[:16]
 
 
+def _menu_signature(items) -> str:
+    if items is None:
+        return "off"
+    payload = {"layout": MENU_LAYOUT_REVISION, "entries": items}
+    return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:16]
+
+
 def merchants(week=None, items=None) -> dict | None:
     """{exchange store: merchant} for this week (operator, 2026-11-10). Each exchange store carries Global's own
     store and owner names (`F_TEXT_TOWN_STORE`, `F_TEXT_TOWN_STORE_OWNER_NAME`), and those often name the other
@@ -520,7 +528,7 @@ def refresh(now=None) -> dict:
         except Exception as exc:  # noqa: BLE001 -- keep what the phone has
             print(f"[captain-menu] list not worked out ({exc!r}); keeping the last one", flush=True)
             return state()
-    sig, names_sig = _signature(items), _signature(names)
+    sig, names_sig = _menu_signature(items), _signature(names)
     with _LOCK:
         st = state()
         changed = []

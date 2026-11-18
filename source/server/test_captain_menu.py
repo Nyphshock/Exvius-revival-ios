@@ -8,6 +8,15 @@ import exvius_shop_catalogue
 
 
 class CaptainMenuTests(unittest.TestCase):
+    def test_menu_signature_changes_when_layout_revision_changes(self):
+        entries = [{"store": "900108", "currency": "106300400", "name": "Exchange"}]
+        with patch.object(captain_menu, "MENU_LAYOUT_REVISION", 1):
+            old_signature = captain_menu._menu_signature(entries)
+        with patch.object(captain_menu, "MENU_LAYOUT_REVISION", 2):
+            new_signature = captain_menu._menu_signature(entries)
+
+        self.assertNotEqual(old_signature, new_signature)
+
     def test_lists_every_owned_event_exchange(self):
         shops = SimpleNamespace(
             _held=lambda: {"106300400": 10, "106300500": 20},
