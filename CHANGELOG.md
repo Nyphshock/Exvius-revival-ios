@@ -4,7 +4,7 @@ Each entry is one update to this repo. To update: in your repo folder run `git p
 
 ## 2026-11-18: Archived Vortex encounter routing
 
-- Vortex events with an indexed encounter but no mission master row now load their battle bundle instead of falling back to a non-combat event response. This fixes the Dread Frost Arrives entry.
+- Vortex events with an indexed encounter but no mission master row now load their battle bundle instead of falling back to a non-combat event response.
 
 ## 2026-11-17: Trial checkpoint rewards and party equipment
 
