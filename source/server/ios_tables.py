@@ -82,6 +82,7 @@ URL = ("F_URL_MST", "9wmd4iua", "UREmi85S")
 # first-clear reward the phone shows are what the server pays. Tokens/keys from libgame (v0.1.18).
 CHALLENGE = ("F_CHALLENGE_MST", "GL9t6cMF", "8Dx2QUZS")
 MISSION = ("F_MISSION_MST", "24Eka6wL", "naJ3P84b")
+DUNGEON = ("F_DUNGEON_MST", "1Bj4oy5Q", "9bEA2SYP")
 UNIT = ("F_UNIT_MST", "SsidX62G", "UW0D8ouL")
 # The Vortex tile order (vortex_order.py, 2026-11-10): the client sorts event areas by `Z0EN6jSh`.
 AREA = ("F_AREA_MST", "Fvix6V0n", "pR2DHS6i")
@@ -259,12 +260,20 @@ def table_bump(spec, *roots) -> int:
         if event_archive.CLIENT_AREA_ALIASES:
             signature = (reward_overrides.signature() if reward_overrides.enabled() else '')
             aliases = json.dumps((event_archive.CLIENT_AREA_ALIASES,
-                                  event_archive.CLIENT_AREA_ALIAS_MISSIONS), sort_keys=True)
+                                  event_archive.CLIENT_AREA_ALIAS_MISSIONS,
+                                  event_archive.CLIENT_AREA_ALIAS_DUNGEONS), sort_keys=True)
             return 4000 + zlib.crc32((spec[0] + signature + aliases).encode()) % 1000
         rewards_bump = (1000 + zlib.crc32((spec[0] + reward_overrides.signature()).encode()) % 1000
                         if reward_overrides.enabled() else 0)
         # Stay above the prior first-clear-only version so cached clients fetch the checkpoint-gated rows.
         return 2000 + rewards_bump
+    if spec == DUNGEON:
+        import event_archive
+        if not event_archive.CLIENT_AREA_ALIASES:
+            return 0
+        aliases = json.dumps((event_archive.CLIENT_AREA_ALIASES,
+                              event_archive.CLIENT_AREA_ALIAS_DUNGEONS), sort_keys=True)
+        return 4000 + zlib.crc32((spec[0] + aliases).encode()) % 1000
     if spec == CHALLENGE:
         import reward_overrides
         if not reward_overrides.enabled():
@@ -306,7 +315,8 @@ def version_bumps() -> dict[str, int]:
     """Table name -> amount to add to its advertised version (only tables served patched)."""
     import ios_texts
     out = {RESOURCE[0]: version_bump(), ios_texts.INDEX[0]: ios_texts.index_bump()}
-    for spec in (RESOURCE_VERSION, RESOURCE_MAP_VERSION, RESOURCE_CHECKSUM, QUEST, URL, CHALLENGE, MISSION, UNIT, AREA,
+    for spec in (RESOURCE_VERSION, RESOURCE_MAP_VERSION, RESOURCE_CHECKSUM, QUEST, URL, CHALLENGE, MISSION,
+                 DUNGEON, UNIT, AREA,
                  MAP_CHECKSUM, SELECT_UNIT, VISION_CARD, MAP_EXT, ABILITY_EXPLAIN, FUNCTION, SWITCH):
         out[spec[0]] = table_bump(spec)
     if refetch_tables():
@@ -338,7 +348,8 @@ def wants(rel: str) -> bool:
 def _which(rel: str):
     if version_bump() and _path(RESOURCE[1]).search(rel):
         return RESOURCE
-    for spec in (RESOURCE_VERSION, RESOURCE_MAP_VERSION, RESOURCE_CHECKSUM, QUEST, URL, CHALLENGE, MISSION, UNIT, AREA,
+    for spec in (RESOURCE_VERSION, RESOURCE_MAP_VERSION, RESOURCE_CHECKSUM, QUEST, URL, CHALLENGE, MISSION,
+                 DUNGEON, UNIT, AREA,
                  MAP_CHECKSUM, SELECT_UNIT, VISION_CARD, MAP_EXT, ABILITY_EXPLAIN, FUNCTION, SWITCH):
         if _path(spec[1]).search(rel) and table_bump(spec):
             return spec
@@ -505,6 +516,23 @@ def patch_mission_table(raw: bytes) -> tuple[bytes, int, int]:
             line = _encrypt(MISSION[2], updated, double)
         out.append(line)
     return ("\n".join(out) + "\n").encode("ascii"), changed, gated
+
+
+def patch_dungeon_table(raw: bytes) -> tuple[bytes, int]:
+    """Move only the aliased event dungeons to their client-side Vortex area IDs."""
+    import event_archive
+    out, changed = [], 0
+    for line, row, double in _rows(raw, DUNGEON[2]):
+        updated = dict(row)
+        area = str(row.get("uv60hgDW") or "")
+        dungeon = str(row.get("U9iHsau3") or "")
+        alias = event_archive.CLIENT_AREA_ALIASES.get(area)
+        if alias and dungeon in event_archive.CLIENT_AREA_ALIAS_DUNGEONS.get(area, ()):
+            updated["uv60hgDW"] = alias
+            line = _encrypt(DUNGEON[2], updated, double)
+            changed += 1
+        out.append(line)
+    return ("\n".join(out) + "\n").encode("ascii"), changed
 
 
 def patch_unit_sell(raw: bytes) -> tuple[bytes, int]:
@@ -789,6 +817,9 @@ def serve(rel: str, *roots: str | None) -> tuple[bytes | None, str | None]:
             data, first_clears, esper_gates = patch_mission_table(open(src, "rb").read())
             return data, (f"{os.path.basename(src)}, {first_clears} first-clear reward(s) from the wiki, "
                           f"{esper_gates} Esper quest(s) checkpoint-gated")
+        if spec == DUNGEON:
+            data, changed = patch_dungeon_table(open(src, "rb").read())
+            return data, f"{os.path.basename(src)}, {changed} archived Vortex dungeon area link(s) updated"
         if spec == UNIT:
             data, changed = patch_unit_sell(open(src, "rb").read())
             return data, f"{os.path.basename(src)}, {changed} story-unit row(s) given a sell price"

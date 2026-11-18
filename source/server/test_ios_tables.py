@@ -79,6 +79,27 @@ class MissionTableEsperGateTests(unittest.TestCase):
         with patch("reward_overrides.enabled", return_value=False):
             self.assertGreaterEqual(ios_tables.table_bump(ios_tables.MISSION), 4000)
 
+    def test_dungeon_table_moves_only_dread_frost_to_alias_area(self):
+        rows = [
+            {"U9iHsau3": "90006", "uv60hgDW": "906", "0HUPxDf1": "9000006"},
+            {"U9iHsau3": "other-dungeon", "uv60hgDW": "906", "0HUPxDf1": "other-destination"},
+        ]
+        parsed = [(json.dumps(row), row, True) for row in rows]
+
+        with patch.object(ios_tables, "_rows", return_value=parsed), \
+                patch.object(ios_tables, "_encrypt",
+                             side_effect=lambda _key, row, _double: json.dumps(row)):
+            raw, changed = ios_tables.patch_dungeon_table(b"")
+
+        served = {row["U9iHsau3"]: row for row in map(json.loads, raw.decode("ascii").splitlines())}
+        self.assertEqual(changed, 1)
+        self.assertEqual(served["90006"]["uv60hgDW"], "9061")
+        self.assertEqual(served["90006"]["0HUPxDf1"], "9000006")
+        self.assertEqual(served["other-dungeon"]["uv60hgDW"], "906")
+
+    def test_dungeon_alias_change_forces_client_table_refetch(self):
+        self.assertGreaterEqual(ios_tables.table_bump(ios_tables.DUNGEON), 4000)
+
     def test_mission_table_version_bump_invalidates_client_cache(self):
         with patch("reward_overrides.enabled", return_value=False):
             self.assertGreaterEqual(ios_tables.table_bump(ios_tables.MISSION), 2000)

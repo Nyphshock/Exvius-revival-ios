@@ -25,6 +25,7 @@ REPLAY_LOOKBACK_DAYS = 14   # first replay week: events still running when the r
 CLIENT_AREA_ALIASES = {'906': '9061'}
 CLIENT_AREA_ALIAS_TEMPLATES = {'906': '899'}
 CLIENT_AREA_ALIAS_MISSIONS = {'906': ('9000406', '9000407', '9000408')}
+CLIENT_AREA_ALIAS_DUNGEONS = {'906': ('90006',)}
 
 
 def client_gate_row(row):
