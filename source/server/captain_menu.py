@@ -208,9 +208,13 @@ def exchange_items(stores: list) -> list:
             if not reward_name:
                 continue
             event_name = _short(store["name"])
+            words = event_name.split()
             suffix = " - " + event_name
-            if (store_id not in own_names and event_name.lower() not in reward_name.lower()
-                    and len(reward_name) + len(suffix) <= 34):
+            while (store_id not in own_names and words and event_name.lower() not in reward_name.lower()
+                   and len(reward_name) + len(suffix) > 34):
+                words = words[1:]
+                suffix = " - " + " ".join(words) if words else ""
+            if store_id not in own_names and suffix and event_name.lower() not in reward_name.lower():
                 label = reward_name + suffix
             else:
                 label = reward_name if len(reward_name) <= 34 else reward_name[:31].rstrip() + "..."
