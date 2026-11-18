@@ -72,20 +72,25 @@ RESOURCE_ID = "290001"             # F_RESOURCE_MAP_MST row of 211020100.cpk
 VERSION_FIELD = "OzT5lSz3"          # base (common_lang) file version in F_RESOURCE_MAP_VERSION_MST_LOCALIZE
 VERSION_BASE = 20000
 SUBMAP = 67
-CAPTAIN_NPC = 0x0BED6C90            # his sprite (the NPC id of events 5, 6 and 9)
-PROMPT_SHIPPED = 110719            # "<name=200028><br>Which exchange do you want to make?"
+KING_NPC = 0x05F5EC54               # King Mog's sprite (sub-map 67, events 2 and 7)
+KING_STORE = 900104                 # King Mog's native store, opened by both event pages
+MINISTER_NPC = 0x05F5F7A8           # Mog Minister's sprite (sub-map 67, event 4)
+MINISTER_STORE = 900122
+CAPTAIN_NPC = 0x0BED6C90
+KING_PROMPT_SHIPPED = 110588       # "<name_npc=100002900><br>What do you want to exchange, Kupo?"
+CAPTAIN_PROMPT_SHIPPED = 110719    # "<name=200028><br>Which exchange do you want to make?"
 NEXT_TEXT, LEAVE_TEXT = 110717, 110718
-TEXT_PROMPT, TEXT_NONE, TEXT_OUT, TEXT_ENTRY = 190001, 190002, 190003, 190100
+TEXT_PROMPT, TEXT_NONE, TEXT_OUT, TEXT_MOVED, TEXT_ENTRY = 190001, 190002, 190003, 190004, 190100
 MAX_ENTRIES = 80                    # labels are one byte: pages + 2 per entry + 1 must stay under 256
-CAPTAIN = "<name=200028><br>"
+KING = "<name_npc=100002900><br>"
 # Map text breaks its own lines (`<br>`, about 50 characters at most in the shipped lines).
 TEXTS = {
-    TEXT_PROMPT: CAPTAIN + "Got currency left over from an event?<br>Which exchange do you want, kupo?",
-    TEXT_NONE: CAPTAIN + "I trade for currency left over from<br>past events, kupo. You don't have any<br>"
-                         "right now. Come back when you do!",
-    TEXT_OUT: CAPTAIN + "You don't have any of that currency<br>left, kupo!",
+    TEXT_PROMPT: KING + "Which exchange do you want, kupo?",
+    TEXT_NONE: KING + "You don't have any exchange currency<br>right now, kupo. Come back when you do!",
+    TEXT_OUT: KING + "You don't have any of that currency<br>left, kupo!",
+    TEXT_MOVED: "All event exchanges are now available from King Mog.",
 }
-# The Captain's own Global exchanges (see the docstring): store, currency, menu name, date Global added it.
+# Global's permanent and Dark Visions exchanges, now listed by King Mog when their currency is held.
 OWN = (
     ("900146", "106211340", "Super Trust Moogle", "2019-08-08"),
     ("900157", "235018200", "Dark Ragnarok", "2020-04-23"),
@@ -117,22 +122,41 @@ def _short(name: str) -> str:
 
 
 def entries(now=None, week=None) -> list:
-    """Owned-currency exchanges: [{store, currency, name, live, date}], live first, newest first."""
+    """In-stock exchanges for owned currencies: [{store, currency, name, live, date}], live first."""
     import exvius_actions_shops as shops
+    from exvius_shop_catalogue import shared_medal_counts
     week = week or shops._replay_week(now)
     opened, history = week[0], week[1]
     held = shops._held()
     towns = shops._table("F_TOWN_STORE_MST", "Z20mNDvL")
+    medals = shops._table("F_MEDAL_EXCHANGE_MST", "S21FT3L8")
+    bought = shared_medal_counts()
+    store_rows = {}
+    for row in shops._rows("F_STORE_ITEM_MST"):
+        if str(row.get("YWF08vZS")) == "50":
+            store_rows.setdefault(str(row["Z20mNDvL"]), []).append(str(row["6uIYE15X"]))
+
+    def has_stock(row_ids):
+        for row_id in row_ids:
+            row = medals.get(str(row_id))
+            if not row:
+                continue
+            mode = str(row.get("kR4n5DxP"))
+            if mode == "2" or (mode == "1" and int(bought.get(str(row_id), 0)) < int(row["x0NDnEC9"])):
+                return True
+        return False
+
     own = {store: (currency, name, day) for store, currency, name, day in OWN}
     out, seen = [], set()
     for store, (currency, name, day) in own.items():
-        if held.get(currency):
+        if held.get(currency) and has_stock(store_rows.get(store, [])):
             out.append({"store": store, "currency": currency, "name": name, "live": False, "date": day})
             seen.add(store)
     runs = shops._area_runs()
     for ex in shops._event_exchanges().get("exchanges", []):
         store, currency = str(ex["store"]), str(ex["currency"])
-        if store in seen or store in own or not held.get(currency) or not ex.get("rows"):
+        if (store in seen or store in own or not held.get(currency) or not ex.get("rows")
+            or not has_stock(ex["rows"])):
             continue
         if (towns.get(store) or {}).get("kaG4xf3I") != "5":
             continue
@@ -264,54 +288,84 @@ def _commands(b: bytes, s: int, e: int):
     return out
 
 
-def _captain_pages(b: bytes):
-    """The Captain's sub-map and [(label table offset, end of script)] of his pages, in file order.
-
-    His events are found by his sprite (an NPC page: display 1, then the NPC id) and parsed with the event
-    format above; a page counts when its script parses to its end and opens on the shipped menu (110719)."""
+def _npc_pages(b: bytes, npc: int, accepts, name: str):
+    """Find parsed pages for an NPC in the exchange sub-map that match a script predicate."""
     maps, ver = _submaps(b)
     sub = next((m for m in maps if m[2] == SUBMAP), None)
     if sub is None:
         raise ValueError(f"map.bin: no sub-map {SUBMAP}")
     lo, hi = sub[0], sub[0] + sub[1]
-    prompt = struct.pack(">I", PROMPT_SHIPPED)
-    head = 4 + 1 + 8 + 14 + 2 + 1          # the event header before its first page (int id, version >= 0x416)
-    marker = b"\x01" + struct.pack(">I", CAPTAIN_NPC)
-    pages, at = [], b.find(marker, lo, hi)
+    head = 4 + 1 + 8 + 14 + (2 if ver >= 0x416 else 0) + 1
+    marker = b"\x01" + struct.pack(">I", npc)
+    pages, at, seen = [], b.find(marker, lo, hi), set()
     while at != -1:
         start = at - head
-        if start >= lo and b[start + 4] == 1:
+        if start >= lo and start not in seen and b[start + 4] == 1:
+            seen.add(start)
             try:
                 found, end = _event(b, start, ver)
             except (struct.error, IndexError):
                 found, end = [], hi + 1
             for label_at, e, s in (found if end <= hi else []):
                 cmds = _commands(b, s, e)
-                if cmds and cmds[0][1] == 0x15 and cmds[0][2][-4:] == prompt:
+                if cmds and accepts(cmds):
                     pages.append((label_at, e))
         at = b.find(marker, at + 1, hi)
     if not pages:
-        raise ValueError("map.bin: the Captain's menu was not found")
+        raise ValueError(f"map.bin: {name} exchange pages were not found")
     if any(a < e for (_, e), (a, _) in zip(pages, pages[1:])):
-        raise ValueError("map.bin: overlapping Captain pages; not patched")
+        raise ValueError(f"map.bin: overlapping {name} pages; not patched")
     return sub, pages
 
 
+def _opens_store(store: int):
+    return lambda cmds: any(cmd == 0x44 and len(data) == 4
+                            and int.from_bytes(data, "big") == store for _, cmd, data in cmds)
+
+
+def _king_pages(b: bytes):
+    return _npc_pages(b, KING_NPC, _opens_store(KING_STORE), "King Mog")
+
+
+def _captain_pages(b: bytes):
+    def has_menu(cmds):
+        return cmds[0][1] == 0x15 and int.from_bytes(cmds[0][2][-4:], "big") == CAPTAIN_PROMPT_SHIPPED
+    return _npc_pages(b, CAPTAIN_NPC, has_menu, "Moogle Guard Captain")
+
+
+def _minister_pages(b: bytes):
+    return _npc_pages(b, MINISTER_NPC, _opens_store(MINISTER_STORE), "Mog Minister")
+
+
+def _page_bytes(labels, body):
+    return (bytes([len(labels)]) + struct.pack(">" + "H" * len(labels), *labels)
+            + struct.pack(">I", len(body)) + body)
+
+
 def patch_map(b: bytes, items: list) -> tuple[bytes, int]:
-    """map.bin with every Captain page's labels and script replaced. Returns (map.bin, pages replaced)."""
-    sub, pages = _captain_pages(b)
+    """Move all exchange pages to King Mog; the Captain and Minister direct players to him."""
+    sub, king_pages = _king_pages(b)
+    captain_sub, captain_pages = _captain_pages(b)
+    minister_sub, minister_pages = _minister_pages(b)
+    if captain_sub[0] != sub[0] or minister_sub[0] != sub[0]:
+        raise ValueError("map.bin: exchange NPCs are not in the same sub-map")
     labels, body = script(items)
-    new_page = (bytes([len(labels)]) + struct.pack(">" + "H" * len(labels), *labels)
-                + struct.pack(">I", len(body)) + body)
+    moved = _cmd(0x08, struct.pack(">I", TEXT_MOVED)) + STEP
+    moved_page = _page_bytes([len(moved)], moved)
+    replacements = [(at, end, _page_bytes(labels, body)) for at, end in king_pages]
+    replacements.extend((at, end, moved_page) for at, end in captain_pages + minister_pages)
+    replacements.sort(key=lambda entry: entry[0])
     out, prev, grow = bytearray(), 0, 0
-    for at, e in pages:
-        out += b[prev:at] + new_page
-        grow += len(new_page) - (e - at)
-        prev = e
+    for at, end, replacement in replacements:
+        if at < prev:
+            raise ValueError("map.bin: overlapping exchange NPC pages; not patched")
+        out += b[prev:at] + replacement
+        grow += len(replacement) - (end - at)
+        prev = end
     out += b[prev:]
     struct.pack_into(">I", out, sub[0], sub[1] + grow)   # the sub-map's size
     struct.pack_into(">I", out, 0, len(out))             # the file's
-    return bytes(out), len(pages)
+    return bytes(out), len(replacements)
 
 
 def patch_text(text: bytes, items: list, columns: int = 8) -> bytes:
@@ -439,7 +493,7 @@ def merchants(week=None, items=None) -> dict | None:
             if name:
                 out[str(row["za2xsDj5"])] = name
     for item in items or []:
-        out[str(item["store"])] = CAPTAIN_NAME
+        out[str(item["store"])] = KING_MOG
     return out
 
 

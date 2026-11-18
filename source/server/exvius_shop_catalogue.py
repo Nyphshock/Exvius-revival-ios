@@ -8,7 +8,7 @@ import time
 
 from data_paths import TEXT_DIR
 from exvius_actions_shops import (_action, _feature, _grant, _int, _node, _pay,
-                                  _reply, _require, _rewards, _rows, _store)
+                                  _reply, _require, _rewards, _rows, _store, _table)
 from exvius_rewards import parse
 from ffbe_state import State
 
@@ -301,18 +301,38 @@ def shared_medal_counts(data=None) -> dict:
     return out
 
 
+def exhausted_medal_rows() -> set[str]:
+    """Medal exchange rows whose shared Shop/town purchase count has reached their limit."""
+    if State.player is None:
+        return set()
+    bought = shared_medal_counts()
+    medals = _table('F_MEDAL_EXCHANGE_MST', 'S21FT3L8')
+    return {str(row_id) for row_id, row in medals.items()
+            if str(row.get('kR4n5DxP')) == '1'
+            and int(bought.get(str(row_id), 0)) >= int(row.get('x0NDnEC9', 0) or 0)}
+
+
 def entry(spec, req):
     details, products, offers = catalogue()
     hidden = hidden_details()
     out = _reply(spec)
-    out['F2rNo6qf'] = [dict(row) for row in details if row['3X1gLufw'] not in hidden]
-    out['TPrh6Ay3'] = [dict(row) for row in products if row['3X1gLufw'] not in hidden]
     counts = _feature('shop_catalogue').get('counts', {})
     shared = shared_medal_counts()
+    available = {}
+    for pid, offer in offers.items():
+        if offer['detail'] in hidden:
+            continue
+        bought = (shared.get(offer['medal'], 0) if offer.get('medal')
+                  else counts.get(receipt_key(pid, offer), 0))
+        if int(bought or 0) < offer['limit']:
+            available[pid] = offer
+    open_details = {offer['detail'] for offer in available.values()}
+    out['F2rNo6qf'] = [dict(row) for row in details if row['3X1gLufw'] in open_details]
+    out['TPrh6Ay3'] = [dict(row) for row in products if row['jPV7Xc4N'] in available]
     out['qS62ewjH'] = [{'jPV7Xc4N': pid, '3X1gLufw': offer['detail'],
                         'Q8GLK1pz': str(shared.get(offer['medal'], 0) if offer.get('medal')
                                         else counts.get(receipt_key(pid, offer), 0))}
-                       for pid, offer in offers.items() if offer['detail'] not in hidden]
+                       for pid, offer in available.items()]
     return out
 
 

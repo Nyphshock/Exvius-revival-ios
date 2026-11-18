@@ -107,5 +107,32 @@ class MissionTableEsperGateTests(unittest.TestCase):
             self.assertEqual(ios_tables.table_bump(ios_tables.MAP_CHECKSUM), 1017)
 
 
+class StoreItemStockFilterTests(unittest.TestCase):
+    def test_removes_only_exhausted_medal_rows_and_preserves_encrypted_bytes(self):
+        raw = b"ordinary\r\nexhausted\navailable"
+        decoded = [
+            {"YWF08vZS": "20", "6uIYE15X": "100"},
+            {"YWF08vZS": "50", "6uIYE15X": "70701"},
+            {"YWF08vZS": "50", "6uIYE15X": "70702"},
+        ]
+
+        filtered, removed = ios_tables.filter_store_item_rows(raw, decoded, {"70701"})
+
+        self.assertEqual(filtered, b"ordinary\r\navailable")
+        self.assertEqual(removed, 1)
+
+    def test_exhausted_rows_force_a_stable_store_master_version(self):
+        with patch("exvius_shop_catalogue.exhausted_medal_rows", return_value={"70701", "70702"}):
+            first = ios_tables.table_bump(ios_tables.STORE_ITEMS)
+        with patch("exvius_shop_catalogue.exhausted_medal_rows", return_value={"70702", "70701"}):
+            second = ios_tables.table_bump(ios_tables.STORE_ITEMS)
+        with patch("exvius_shop_catalogue.exhausted_medal_rows", return_value=set()):
+            none = ios_tables.table_bump(ios_tables.STORE_ITEMS)
+
+        self.assertGreaterEqual(first, 100000)
+        self.assertEqual(first, second)
+        self.assertEqual(none, 0)
+
+
 if __name__ == "__main__":
     unittest.main()

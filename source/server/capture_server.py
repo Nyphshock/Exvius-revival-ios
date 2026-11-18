@@ -478,6 +478,18 @@ class Handler(BaseHTTPRequestHandler):
     # NOTE on ordering: these MUST come after any rebinding. A class body executes top to bottom, so an earlier
     # `def do_GET` is silently overwritten by a later `do_GET = _handle` — which is exactly what happened when
     # the CDN handler was first added above (it was dead code, and a CDN fetch was logged as an action call).
+    def _is_store_items_fetch(self):
+        rel = urllib.parse.unquote(self.path.split("?", 1)[0].lstrip("/"))
+        return bool(re.fullmatch(r"mst/Ver\d+_03cY9vXe\.dat", rel))
+
+    def _fetch_cdn(self, *, locked=False):
+        if not self._is_store_items_fetch():
+            return self._cdn_fetch()
+        if locked:
+            return self._run_profiled(self._cdn_fetch)
+        with STATE_LOCK:
+            return self._run_profiled(self._cdn_fetch)
+
     def do_POST(self):
         if self.path == '/__exvius/new-game':
             with STATE_LOCK:
@@ -502,13 +514,13 @@ class Handler(BaseHTTPRequestHandler):
             with STATE_LOCK:
                 # Original web pages post device parameters when opening.
                 # Their content is a local resource, not an encrypted game action.
-                self._cdn_fetch()
+                self._fetch_cdn(locked=True)
 
     def do_GET(self):
         if self.path == '/__exvius/status':
             with STATE_LOCK:
                 return self._run_profiled(self._offline_menu)
-        self._cdn_fetch()
+        self._fetch_cdn()
 
     def _offline_menu(self, reset=False, action=None):
         code = 200
@@ -600,7 +612,7 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(data)
 
     def do_HEAD(self):
-        self._cdn_fetch()
+        self._fetch_cdn()
 
     def _form_field(self, name: str) -> str | None:
         """A field of the request's query string or url-encoded POST body (read once, kept)."""

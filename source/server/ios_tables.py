@@ -88,6 +88,7 @@ UNIT = ("F_UNIT_MST", "SsidX62G", "UW0D8ouL")
 AREA = ("F_AREA_MST", "Fvix6V0n", "pR2DHS6i")
 FUNCTION = ("F_FUNCTION_MST", "6wibj9m8", "sy6GRuY2")
 SWITCH = ("F_SWITCH_MST", "T46RpNZH", "AUx51pni")
+STORE_ITEMS = ("F_STORE_ITEM_MST", "03cY9vXe", None)
 # Map pack sizes (`JwbkKrjA`, the common_lang file; ResourceSizeMst). The Farplane pack's row gets the size of
 # the pack actually served, or the phone downloads it again on every visit (captain_menu.served_size, 2026-11-10).
 # The second column (`mYtcPkQQ`) is never read by the game (the name isn't in libgame).
@@ -239,6 +240,10 @@ def art(*roots):
 
 def table_bump(spec, *roots) -> int:
     import sound_compat
+    if spec == STORE_ITEMS:
+        from exvius_shop_catalogue import exhausted_medal_rows
+        exhausted = sorted(exhausted_medal_rows())
+        return 100000 + zlib.crc32(",".join(exhausted).encode()) % 100000 if exhausted else 0
     if spec == RESOURCE_VERSION:
         built = art(*roots)
         return sound_bump() + (built[1] if built else 0)
@@ -317,7 +322,7 @@ def version_bumps() -> dict[str, int]:
     out = {RESOURCE[0]: version_bump(), ios_texts.INDEX[0]: ios_texts.index_bump()}
     for spec in (RESOURCE_VERSION, RESOURCE_MAP_VERSION, RESOURCE_CHECKSUM, QUEST, URL, CHALLENGE, MISSION,
                  DUNGEON, UNIT, AREA,
-                 MAP_CHECKSUM, SELECT_UNIT, VISION_CARD, MAP_EXT, ABILITY_EXPLAIN, FUNCTION, SWITCH):
+                 MAP_CHECKSUM, SELECT_UNIT, VISION_CARD, MAP_EXT, ABILITY_EXPLAIN, FUNCTION, SWITCH, STORE_ITEMS):
         out[spec[0]] = table_bump(spec)
     if refetch_tables():
         for name in REFETCH:
@@ -350,7 +355,7 @@ def _which(rel: str):
         return RESOURCE
     for spec in (RESOURCE_VERSION, RESOURCE_MAP_VERSION, RESOURCE_CHECKSUM, QUEST, URL, CHALLENGE, MISSION,
                  DUNGEON, UNIT, AREA,
-                 MAP_CHECKSUM, SELECT_UNIT, VISION_CARD, MAP_EXT, ABILITY_EXPLAIN, FUNCTION, SWITCH):
+                 MAP_CHECKSUM, SELECT_UNIT, VISION_CARD, MAP_EXT, ABILITY_EXPLAIN, FUNCTION, SWITCH, STORE_ITEMS):
         if _path(spec[1]).search(rel) and table_bump(spec):
             return spec
     return None
@@ -397,6 +402,20 @@ def _encrypt(key_text: str, row: dict, double: bool) -> str:
     from ffbe_crypto import cbc_encrypt, key16
     return cbc_encrypt(key16(key_text), json.dumps(row, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
                        double_pad=double)
+
+
+def filter_store_item_rows(raw: bytes, decoded_rows: list[dict], exhausted: set[str]) -> tuple[bytes, int]:
+    """Drop exhausted medal offers while preserving remaining encrypted rows byte-for-byte."""
+    encoded_rows = raw.splitlines(keepends=True)
+    if len(encoded_rows) != len(decoded_rows):
+        raise ValueError(f"store item master row mismatch: {len(encoded_rows)} raw vs {len(decoded_rows)} decoded")
+    kept, removed = [], 0
+    for encoded, row in zip(encoded_rows, decoded_rows):
+        if str(row.get("YWF08vZS")) == "50" and str(row.get("6uIYE15X")) in exhausted:
+            removed += 1
+        else:
+            kept.append(encoded)
+    return b"".join(kept), removed
 
 
 def patch_challenges(raw: bytes) -> tuple[bytes, int]:
@@ -799,6 +818,15 @@ def serve(rel: str, *roots: str | None) -> tuple[bytes | None, str | None]:
     if not src:
         return None, None
     try:
+        if spec == STORE_ITEMS:
+            from data_paths import MST_DIR
+            from exvius_shop_catalogue import exhausted_medal_rows
+            decoded_path = os.path.join(MST_DIR, "F_STORE_ITEM_MST.ndjson")
+            with open(decoded_path, encoding="utf-8") as source:
+                decoded_rows = [json.loads(line) for line in source if line.strip()]
+            data, removed = filter_store_item_rows(open(src, "rb").read(), decoded_rows,
+                                                   exhausted_medal_rows())
+            return data, f"{os.path.basename(src)}, {removed} exhausted medal offer(s) hidden for this player"
         if spec == RESOURCE:
             drop = set()
             if drop_unversioned():
