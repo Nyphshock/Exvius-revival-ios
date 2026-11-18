@@ -226,7 +226,7 @@ def item_exchange_schedule() -> dict | None:
     if not items:
         return None
     primary = items[0]
-    return {"Z20mNDvL": KING_STORE, "za2xsDj5": str(primary["store"]), "w7VR6ypY": "0",
+    return {"Z20mNDvL": KING_STORE, "za2xsDj5": str(KING_STORE), "w7VR6ypY": "0",
             "VjJQ51uG": "2020-01-01 00:00:00", "m8ivD4NX": "2099-12-31 23:59:59",
             "suR36Jpm": "20:" + str(primary["currency"]), "89YmCAzo": "", "0euar5mZ": ""}
 

@@ -106,7 +106,7 @@ class CaptainMenuTests(unittest.TestCase):
             row = captain_menu.item_exchange_schedule()
 
         self.assertEqual(row["Z20mNDvL"], captain_menu.KING_STORE)
-        self.assertEqual(row["za2xsDj5"], "900109")
+        self.assertEqual(row["za2xsDj5"], str(captain_menu.KING_STORE))
         self.assertEqual(row["suR36Jpm"], "20:106300500")
 
     def test_menu_signature_changes_when_layout_revision_changes(self):
