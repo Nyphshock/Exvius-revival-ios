@@ -72,7 +72,7 @@ SCENE = "211020100"
 RESOURCE_ID = "290001"             # F_RESOURCE_MAP_MST row of 211020100.cpk
 VERSION_FIELD = "OzT5lSz3"          # base (common_lang) file version in F_RESOURCE_MAP_VERSION_MST_LOCALIZE
 VERSION_BASE = 20000
-MENU_LAYOUT_REVISION = 9
+MENU_LAYOUT_REVISION = 10
 SUBMAP = 67
 KING_NPC = 0x05F5EC54               # King Mog's sprite (sub-map 67, events 2 and 7)
 KING_STORE = 900104                 # King Mog's native store, opened by both event pages
@@ -623,6 +623,12 @@ def refresh(now=None) -> dict:
         with open(tmp, "w", encoding="utf-8") as fh:
             json.dump(st, fh, indent=1)
         os.replace(tmp, _state_path())
+        if "menu" in changed:
+            try:
+                from data_paths import GAME_FILES
+                built_pack(GAME_FILES)
+            except Exception as exc:  # noqa: BLE001 -- the next resource request can retry
+                print(f"[captain-menu] CPK not prebuilt ({exc!r})", flush=True)
     if "menu" in changed:
           print(f"[king-menu] rev {st['rev']}: {len(st['entries'])} store(s), "
               f"{len(st['offers'])} item(s)" if sig != "off"
