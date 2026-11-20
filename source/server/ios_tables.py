@@ -92,6 +92,7 @@ FUNCTION = ("F_FUNCTION_MST", "6wibj9m8", "sy6GRuY2")
 SWITCH = ("F_SWITCH_MST", "T46RpNZH", "AUx51pni")
 STORE_ITEMS = ("F_STORE_ITEM_MST", "03cY9vXe", None)
 STORE_ITEMS_INDEX = "mst/03cY9vXe.i"
+STORE_ITEMS_INDEX_REVISION_BUMP = 200000
 # Map pack sizes (`JwbkKrjA`, the common_lang file; ResourceSizeMst). The Farplane pack's row gets the size of
 # the pack actually served, or the phone downloads it again on every visit (captain_menu.served_size, 2026-11-10).
 # The second column (`mYtcPkQQ`) is never read by the game (the name isn't in libgame).
@@ -248,7 +249,8 @@ def table_bump(spec, *roots) -> int:
         offers = captain_menu.state().get("offers") or []
         signature = [(str(row.get("store")), str(row.get("medal")), str(row.get("currency")))
                      for row in offers]
-        return 100000 + zlib.crc32(json.dumps(signature, sort_keys=True).encode()) % 100000 if offers else 0
+        return (STORE_ITEMS_INDEX_REVISION_BUMP + 100000
+            + zlib.crc32(json.dumps(signature, sort_keys=True).encode()) % 100000) if offers else 0
     if spec == RESOURCE_VERSION:
         built = art(*roots)
         return sound_bump() + (built[1] if built else 0)

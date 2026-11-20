@@ -163,6 +163,14 @@ class StoreItemStockFilterTests(unittest.TestCase):
         self.assertNotEqual(first, reordered)
         self.assertEqual(none, 0)
 
+    def test_store_index_revision_forces_refetch_of_cached_master(self):
+        offers = [{"store": "900108", "medal": "70701", "currency": "106300400"}]
+        with patch("captain_menu.state", return_value={"offers": offers}), \
+                patch.object(ios_tables.zlib, "crc32", return_value=0):
+            bump = ios_tables.table_bump(ios_tables.STORE_ITEMS)
+
+        self.assertEqual(bump, ios_tables.STORE_ITEMS_INDEX_REVISION_BUMP + 100000)
+
 
 if __name__ == "__main__":
     unittest.main()
