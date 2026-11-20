@@ -187,7 +187,8 @@ def exchange_items(stores: list) -> list:
     offers_by_medal = defaultdict(list)
     for pid, offer in catalogue()[2].items():
         if offer.get("medal"):
-            offers_by_medal[str(offer["medal"])].append(pid)
+            offers_by_medal[str(offer["medal"])].append((pid, offer))
+    held = shops._held()
     names = labels()
     exhausted = exhausted_medal_rows()
     own_names = {store: name for store, _, name, _ in OWN}
@@ -198,7 +199,13 @@ def exchange_items(stores: list) -> list:
             if medal in exhausted or medal in seen:
                 continue
             product_ids = offers_by_medal.get(medal) or []
-            reward_name = names.get(product_ids[0], {}).get("name") if product_ids else None
+            affordable = [(pid, offer) for pid, offer in product_ids
+                          if (str((offer.get("cost") or ("", ""))[0]) == "20"
+                              and held.get(str((offer.get("cost") or ("", ""))[1]), 0)
+                              >= int(offer.get("price") or 0))]
+            if not affordable:
+                continue
+            reward_name = names.get(affordable[0][0], {}).get("name")
             if not reward_name:
                 reward_name = own_names.get(store_id)
             if not reward_name:

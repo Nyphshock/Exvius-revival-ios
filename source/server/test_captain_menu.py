@@ -17,11 +17,11 @@ class CaptainMenuTests(unittest.TestCase):
             {"Z20mNDvL": "900108", "YWF08vZS": "50", "6uIYE15X": "70701"},
             {"Z20mNDvL": "900108", "YWF08vZS": "50", "6uIYE15X": "70702"},
             {"Z20mNDvL": "900109", "YWF08vZS": "50", "6uIYE15X": "70703"},
-        ])
+        ], _held=lambda: {"106300400": 100, "106300500": 100})
         offers = {
-            "one": {"medal": "70701"},
-            "sold": {"medal": "70702"},
-            "two": {"medal": "70703"},
+            "one": {"medal": "70701", "cost": (20, "106300400"), "price": 10},
+            "sold": {"medal": "70702", "cost": (20, "106300400"), "price": 10},
+            "two": {"medal": "70703", "cost": (20, "106300500"), "price": 10},
         }
 
         with patch.dict(sys.modules, {"exvius_actions_shops": shops}):
@@ -42,12 +42,12 @@ class CaptainMenuTests(unittest.TestCase):
     def test_long_event_name_does_not_truncate_item_name(self):
         shops = SimpleNamespace(_rows=lambda *_: [
             {"Z20mNDvL": "900108", "YWF08vZS": "50", "6uIYE15X": "70701"},
-        ])
+        ], _held=lambda: {"106300400": 100})
         stores = [{"store": "900108", "currency": "106300400", "name": "Operation MA Demolition"}]
 
         with patch.dict(sys.modules, {"exvius_actions_shops": shops}):
             with patch.object(exvius_shop_catalogue, "catalogue", return_value=([], [], {
-                "offer": {"medal": "70701"},
+                    "offer": {"medal": "70701", "cost": (20, "106300400"), "price": 10},
             })):
                 with patch.object(exvius_shop_catalogue, "labels", return_value={
                     "offer": {"name": "A recognizable item title"},
@@ -61,7 +61,7 @@ class CaptainMenuTests(unittest.TestCase):
         shops = SimpleNamespace(_rows=lambda *_: [
             {"Z20mNDvL": "900108", "YWF08vZS": "50", "6uIYE15X": "70701"},
             {"Z20mNDvL": "900109", "YWF08vZS": "50", "6uIYE15X": "70702"},
-        ])
+        ], _held=lambda: {"106300400": 100, "106300500": 100})
         stores = [
             {"store": "900108", "currency": "106300400", "name": "Operation MA Demolition"},
             {"store": "900109", "currency": "106300500", "name": "Trial of the Creator"},
@@ -69,7 +69,8 @@ class CaptainMenuTests(unittest.TestCase):
 
         with patch.dict(sys.modules, {"exvius_actions_shops": shops}):
             with patch.object(exvius_shop_catalogue, "catalogue", return_value=([], [], {
-                "offer-a": {"medal": "70701"}, "offer-b": {"medal": "70702"},
+                "offer-a": {"medal": "70701", "cost": (20, "106300400"), "price": 10},
+                "offer-b": {"medal": "70702", "cost": (20, "106300500"), "price": 10},
             })):
                 with patch.object(exvius_shop_catalogue, "labels", return_value={
                     "offer-a": {"name": "Calamity Gem"}, "offer-b": {"name": "Calamity Gem"},
@@ -80,6 +81,25 @@ class CaptainMenuTests(unittest.TestCase):
         self.assertEqual(len(items), 2)
         self.assertNotEqual(items[0]["name"], items[1]["name"])
         self.assertTrue(all(item["name"].startswith("Calamity Gem - ") for item in items))
+
+    def test_hides_offer_when_currency_is_held_but_balance_is_below_price(self):
+        shops = SimpleNamespace(
+            _rows=lambda *_: [{"Z20mNDvL": "900108", "YWF08vZS": "50", "6uIYE15X": "70701"}],
+            _held=lambda: {"106300400": 695},
+        )
+        stores = [{"store": "900108", "currency": "106300400", "name": "Exchange"}]
+
+        with patch.dict(sys.modules, {"exvius_actions_shops": shops}):
+            with patch.object(exvius_shop_catalogue, "catalogue", return_value=([], [], {
+                "unaffordable": {"medal": "70701", "cost": (20, "106300400"), "price": 1200},
+            })):
+                with patch.object(exvius_shop_catalogue, "labels", return_value={
+                    "unaffordable": {"name": "Accelerate"},
+                }):
+                    with patch.object(exvius_shop_catalogue, "exhausted_medal_rows", return_value=set()):
+                        items = captain_menu.exchange_items(stores)
+
+        self.assertEqual(items, [])
 
     def test_king_menu_starts_with_one_item_exchange_button(self):
         items = [
