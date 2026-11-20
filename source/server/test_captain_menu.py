@@ -134,6 +134,12 @@ class CaptainMenuTests(unittest.TestCase):
         choice = next(command for command in root if command[1] == 0x15)
         payload = choice[2]
         self.assertEqual(payload[0], 4)
+        root_text_ids = [int.from_bytes(payload[1 + 5 * index:5 + 5 * index], "big")
+                         for index in range(payload[0])]
+        self.assertEqual(root_text_ids, [captain_menu.TEXT_ENTRY, captain_menu.TEXT_ENTRY + 1,
+                                         captain_menu.TEXT_ENTRY + 2, captain_menu.LEAVE_TEXT])
+        self.assertFalse(any(command == 0x15 for index in range(1, len(labels) - 1)
+                             for _, command, _ in captain_menu._commands(body, labels[index], labels[index + 1])))
         self.assertEqual(captain_menu.texts(items)[captain_menu.TEXT_ENTRY + 2], "Trial of the Creator")
 
     def test_native_item_exchange_schedules_keep_each_store_currency(self):
