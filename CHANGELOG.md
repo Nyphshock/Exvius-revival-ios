@@ -2,6 +2,10 @@
 
 Each entry is one update to this repo. To update: in your repo folder run `git pull`, then from `ios-server` run `docker compose build && docker compose up -d`. Your save isn't touched. Open the game twice afterwards so it picks up the new data.
 
+## 2026-11-20: King Mog trade cancellation
+
+- Canceling at King Mog now exits the exchange prompt instead of opening the trade screen.
+
 ## 2026-11-18: Archived Vortex encounter routing
 
 - Vortex events with an indexed encounter but no mission master row now load their battle bundle instead of falling back to a non-combat event response.

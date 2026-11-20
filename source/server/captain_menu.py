@@ -72,7 +72,7 @@ SCENE = "211020100"
 RESOURCE_ID = "290001"             # F_RESOURCE_MAP_MST row of 211020100.cpk
 VERSION_FIELD = "OzT5lSz3"          # base (common_lang) file version in F_RESOURCE_MAP_VERSION_MST_LOCALIZE
 VERSION_BASE = 20000
-MENU_LAYOUT_REVISION = 5
+MENU_LAYOUT_REVISION = 6
 SUBMAP = 67
 KING_NPC = 0x05F5EC54               # King Mog's sprite (sub-map 67, events 2 and 7)
 KING_STORE = 900104                 # King Mog's native store, opened by both event pages
@@ -251,7 +251,8 @@ def script(items: list) -> tuple[list, bytes]:
     menu = _cmd(0x15, choice + struct.pack(">I", TEXT_PROMPT)) + STEP
     open_store = (_cmd(0x44, struct.pack(">I", KING_STORE)) + _cmd(0x02, b"\x00\x01")
                   + STEP + _cmd(0x04, struct.pack(">H", 0)) + STEP)
-    return [0, len(menu), len(menu) + len(open_store)], menu + open_store
+    leave = STEP
+    return [0, len(menu), len(menu) + len(open_store)], menu + open_store + leave
 
 
 def texts(items: list) -> dict:

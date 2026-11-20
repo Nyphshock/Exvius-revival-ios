@@ -94,9 +94,11 @@ class CaptainMenuTests(unittest.TestCase):
                    for index in range(payload[0])]
         stores = [int.from_bytes(data, "big") for _, command, data in captain_menu._commands(
             body, labels[1], labels[-1]) if command == 0x44]
+        leave = captain_menu._commands(body, labels[2], len(body))
 
         self.assertEqual(options, [captain_menu.TEXT_ITEM_EXCHANGE, captain_menu.LEAVE_TEXT])
         self.assertEqual(stores, [captain_menu.KING_STORE])
+        self.assertEqual(leave, [(labels[2], 0x01, b"")])
 
     def test_native_item_exchange_schedule_uses_canonical_store_currency(self):
         with patch.object(captain_menu, "state", return_value={"offers": [
