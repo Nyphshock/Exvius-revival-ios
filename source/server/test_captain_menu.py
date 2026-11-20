@@ -101,10 +101,10 @@ class CaptainMenuTests(unittest.TestCase):
 
         self.assertEqual(items, [])
 
-    def test_king_menu_starts_with_one_item_exchange_button(self):
+    def test_king_menu_opens_each_original_native_store(self):
         items = [
-            {"store": "900108", "currency": "106300400", "name": "Phoenix Down - First"},
-            {"store": "900109", "currency": "106300500", "name": "Hero Ring - Second"},
+            {"store": "900108", "currency": "106300400", "event": "First", "name": "Phoenix Down"},
+            {"store": "900109", "currency": "106300500", "event": "Second", "name": "Hero Ring"},
         ]
         labels, body = captain_menu.script(items)
         root = captain_menu._commands(body, labels[0], labels[1])
@@ -112,24 +112,27 @@ class CaptainMenuTests(unittest.TestCase):
         payload = choice[2]
         options = [int.from_bytes(payload[1 + 5 * index:5 + 5 * index], "big")
                    for index in range(payload[0])]
-        stores = [int.from_bytes(data, "big") for _, command, data in captain_menu._commands(
-            body, labels[1], labels[-1]) if command == 0x44]
-        leave = captain_menu._commands(body, labels[2], len(body))
+        stores = [int.from_bytes(data, "big") for index in range(len(labels) - 1)
+                  for _, command, data in captain_menu._commands(body, labels[index], labels[index + 1])
+                  if command == 0x44]
 
         self.assertEqual(options, [captain_menu.TEXT_ITEM_EXCHANGE, captain_menu.LEAVE_TEXT])
-        self.assertEqual(stores, [captain_menu.KING_STORE])
-        self.assertEqual(leave, [(labels[2], 0x01, b"")])
+        self.assertEqual(stores, [900108, 900109])
+        event_page = captain_menu._commands(body, labels[1], labels[2])
+        self.assertTrue(any(command == 0x15 for _, command, _ in event_page))
+        self.assertEqual(captain_menu.texts(items)[captain_menu.TEXT_ENTRY], "First")
+        self.assertEqual(captain_menu.texts(items)[captain_menu.TEXT_ENTRY + 1], "Second")
 
-    def test_native_item_exchange_schedule_uses_canonical_store_currency(self):
+    def test_native_item_exchange_schedules_keep_each_store_currency(self):
         with patch.object(captain_menu, "state", return_value={"offers": [
             {"store": "900109", "currency": "106300500", "name": "Item A"},
             {"store": "900108", "currency": "106300400", "name": "Item B"},
         ]}):
-            row = captain_menu.item_exchange_schedule()
+            rows = captain_menu.item_exchange_schedules()
 
-        self.assertEqual(row["Z20mNDvL"], captain_menu.KING_STORE)
-        self.assertEqual(row["za2xsDj5"], str(captain_menu.KING_STORE))
-        self.assertEqual(row["suR36Jpm"], "20:106300500")
+        self.assertEqual([row["Z20mNDvL"] for row in rows], ["900108", "900109"])
+        self.assertEqual([row["za2xsDj5"] for row in rows], ["900108", "900109"])
+        self.assertEqual([row["suR36Jpm"] for row in rows], ["20:106300400", "20:106300500"])
 
     def test_menu_signature_changes_when_layout_revision_changes(self):
         entries = [{"store": "900108", "currency": "106300400", "name": "Exchange"}]

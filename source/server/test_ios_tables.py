@@ -119,7 +119,7 @@ class StoreItemStockFilterTests(unittest.TestCase):
     def test_native_store_index_sidecar_is_served_through_ios_tables(self):
         self.assertTrue(ios_tables.wants(ios_tables.STORE_ITEMS_INDEX))
 
-    def test_groups_only_eligible_medal_rows_under_the_king_store(self):
+    def test_filters_eligible_medal_rows_within_each_native_store(self):
         raw = b"medal-a\nordinary\r\nmedal-b\n"
         decoded = [
             {"Z20mNDvL": "900108", "YWF08vZS": "50", "6uIYE15X": "70701"},
@@ -127,7 +127,9 @@ class StoreItemStockFilterTests(unittest.TestCase):
             {"Z20mNDvL": "900110", "YWF08vZS": "50", "6uIYE15X": "70702"},
         ]
 
-        index = ios_tables.store_item_index(raw, decoded, 378, 900109, {"70701"})
+        index = ios_tables.store_item_index(raw, decoded, 378, {
+            "900108": {"70701"}, "900110": {"70702"},
+        })
         count = struct.unpack_from("<H", index, 8)[0]
         offset = 10 + count * 12
         group_count = struct.unpack_from("<H", index, offset)[0]
@@ -141,7 +143,8 @@ class StoreItemStockFilterTests(unittest.TestCase):
 
         self.assertEqual(index[:4], bytes.fromhex("0000beff"))
         self.assertEqual(index[-4:], bytes.fromhex("beff0000"))
-        self.assertEqual(groups[900109], [0])
+        self.assertEqual(groups[900108], [0])
+        self.assertEqual(groups[900109], [1])
         self.assertEqual(groups[900110], [2])
 
     def test_eligible_offers_force_a_stable_store_master_version(self):

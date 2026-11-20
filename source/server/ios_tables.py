@@ -92,7 +92,7 @@ FUNCTION = ("F_FUNCTION_MST", "6wibj9m8", "sy6GRuY2")
 SWITCH = ("F_SWITCH_MST", "T46RpNZH", "AUx51pni")
 STORE_ITEMS = ("F_STORE_ITEM_MST", "03cY9vXe", None)
 STORE_ITEMS_INDEX = "mst/03cY9vXe.i"
-STORE_ITEMS_INDEX_REVISION_BUMP = 200000
+STORE_ITEMS_INDEX_REVISION_BUMP = 300000
 # Map pack sizes (`JwbkKrjA`, the common_lang file; ResourceSizeMst). The Farplane pack's row gets the size of
 # the pack actually served, or the phone downloads it again on every visit (captain_menu.served_size, 2026-11-10).
 # The second column (`mYtcPkQQ`) is never read by the game (the name isn't in libgame).
@@ -413,25 +413,27 @@ def _encrypt(key_text: str, row: dict, double: bool) -> str:
 
 
 def store_item_index(raw: bytes, decoded_rows: list[dict], version: int,
-                     king_store: int | None = None, offer_ids: set[str] | None = None) -> bytes:
-    """Build the native seek index, optionally grouping eligible medal rows under King Mog's store ID."""
+                     eligible_by_store: dict[str, set[str]] | None = None) -> bytes:
+    """Build the native seek index, filtering eligible exchange rows within their original stores."""
     encoded_rows = raw.splitlines(keepends=True)
     if len(encoded_rows) != len(decoded_rows):
         raise ValueError(f"store item master row mismatch: {len(encoded_rows)} raw vs {len(decoded_rows)} decoded")
     direct, groups = [], defaultdict(list)
     offset = 0
-    eligible = []
-    offer_ids = {str(iid) for iid in offer_ids or ()}
+    eligible_by_store = {str(store): {str(iid) for iid in ids}
+                         for store, ids in (eligible_by_store or {}).items()}
+    eligible_groups = defaultdict(list)
     for ordinal, (line, row) in enumerate(zip(encoded_rows, decoded_rows)):
         body = line.rstrip(b"\r\n")
+        store = str(row["Z20mNDvL"])
         direct.append((ordinal, offset, len(body)))
-        groups[int(row["Z20mNDvL"])].append(ordinal)
-        if (king_store is not None and str(row.get("YWF08vZS")) == "50"
-                and str(row.get("6uIYE15X")) in offer_ids):
-            eligible.append(ordinal)
+        groups[int(store)].append(ordinal)
+        if (store in eligible_by_store and str(row.get("YWF08vZS")) == "50"
+                and str(row.get("6uIYE15X")) in eligible_by_store[store]):
+            eligible_groups[store].append(ordinal)
         offset += len(line)
-    if king_store is not None and eligible:
-        groups[int(king_store)] = sorted(set(eligible))
+    for store, ordinals in eligible_groups.items():
+        groups[int(store)] = ordinals
 
     def short_count(count):
         if not 0 <= count <= 65535:
@@ -455,12 +457,11 @@ def store_item_index_version(source_version: int) -> int:
 
 
 def store_item_index_reply(*roots) -> tuple[bytes | None, str | None]:
-    """The native `.i` sidecar, with this player's available medal rows grouped under King Mog's store."""
+    """The native `.i` sidecar, filtering eligible medal rows in each original event store."""
     import captain_menu
-    st = captain_menu.state()
-    offers = st.get("offers") or []
-    schedule = captain_menu.item_exchange_schedule()
-    if not offers or not schedule:
+    offers = captain_menu.state().get("offers") or []
+    schedules = captain_menu.item_exchange_schedules()
+    if not offers or not schedules:
         return None, None
     src = source_table(*roots, token=STORE_ITEMS[1])
     if not src:
@@ -471,9 +472,11 @@ def store_item_index_reply(*roots) -> tuple[bytes | None, str | None]:
     with open(decoded_path, encoding="utf-8") as source:
         rows = [json.loads(line) for line in source if line.strip()]
     raw = open(src, "rb").read()
-    data = store_item_index(raw, rows, version, int(schedule["za2xsDj5"]),
-                            {str(row["medal"]) for row in offers})
-    return data, (f"F_STORE_ITEM_MST index Ver{version}, King Mog store {schedule['za2xsDj5']}, "
+    eligible_by_store = defaultdict(set)
+    for offer in offers:
+        eligible_by_store[str(offer["store"])].add(str(offer["medal"]))
+    data = store_item_index(raw, rows, version, eligible_by_store)
+    return data, (f"F_STORE_ITEM_MST index Ver{version}, {len(schedules)} native event store(s), "
                   f"{len(offers)} available item(s)")
 
 

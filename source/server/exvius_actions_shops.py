@@ -690,11 +690,11 @@ def store_schedules(now=None):
         rows = counter_schedules(week=week) + summon_screen_schedules(week=week)
     import captain_menu
     if captain_menu.enabled():
-        rows = [row for row in rows if str(row.get('Z20mNDvL')) not in ('900104', '900122')]
-        unified = captain_menu.item_exchange_schedule()
-        if unified:
-            rows.append(unified)
-        return rows
+        native_schedules = captain_menu.item_exchange_schedules()
+        native_ids = {row['Z20mNDvL'] for row in native_schedules}
+        rows = [row for row in rows if str(row.get('Z20mNDvL')) not in ('900104', '900122')
+                and str(row.get('Z20mNDvL')) not in native_ids]
+        return rows + native_schedules
     have = {row['Z20mNDvL'] for row in rows}
     return rows + [row for row in captain_schedules() if row['Z20mNDvL'] not in have]
 
@@ -731,11 +731,6 @@ def medal_exchange(spec, req):
              "unknown medal merchant")
     available = {str(r["6uIYE15X"]) for r in _rows("F_STORE_ITEM_MST")
                  if r.get("Z20mNDvL") == store and r.get("YWF08vZS") == "50"}
-    import captain_menu
-    unified = captain_menu.item_exchange_schedule()
-    if unified and store == str(unified.get("za2xsDj5")):
-        available.update(str(row.get("medal")) for row in captain_menu.state().get("offers") or []
-                         if row.get("medal"))
     masters = _table("F_MEDAL_EXCHANGE_MST", "S21FT3L8")
     saved = deepcopy(_feature("medal_exchange"))
     counts = saved.setdefault("counts", {})

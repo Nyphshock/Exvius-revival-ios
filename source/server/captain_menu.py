@@ -72,7 +72,7 @@ SCENE = "211020100"
 RESOURCE_ID = "290001"             # F_RESOURCE_MAP_MST row of 211020100.cpk
 VERSION_FIELD = "OzT5lSz3"          # base (common_lang) file version in F_RESOURCE_MAP_VERSION_MST_LOCALIZE
 VERSION_BASE = 20000
-MENU_LAYOUT_REVISION = 6
+MENU_LAYOUT_REVISION = 7
 SUBMAP = 67
 KING_NPC = 0x05F5EC54               # King Mog's sprite (sub-map 67, events 2 and 7)
 KING_STORE = 900104                 # King Mog's native store, opened by both event pages
@@ -82,8 +82,8 @@ CAPTAIN_NPC = 0x0BED6C90
 KING_PROMPT_SHIPPED = 110588       # "<name_npc=100002900><br>What do you want to exchange, Kupo?"
 CAPTAIN_PROMPT_SHIPPED = 110719    # "<name=200028><br>Which exchange do you want to make?"
 NEXT_TEXT, LEAVE_TEXT = 110717, 110718
-TEXT_PROMPT, TEXT_NONE, TEXT_OUT, TEXT_MOVED, TEXT_ITEM_EXCHANGE, TEXT_ENTRY = (
-    190001, 190002, 190003, 190004, 190005, 190100)
+TEXT_PROMPT, TEXT_NONE, TEXT_OUT, TEXT_MOVED, TEXT_ITEM_EXCHANGE, TEXT_BACK, TEXT_SELECT_EVENT, TEXT_ENTRY = (
+    190001, 190002, 190003, 190004, 190005, 190006, 190007, 190100)
 KING = "<name_npc=100002900><br>"
 # Map text breaks its own lines (`<br>`, about 50 characters at most in the shipped lines).
 TEXTS = {
@@ -92,6 +92,8 @@ TEXTS = {
     TEXT_OUT: KING + "You don't have any of that currency<br>left, kupo!",
     TEXT_MOVED: "All event exchanges are now available from King Mog.",
     TEXT_ITEM_EXCHANGE: "Item Exchange",
+    TEXT_BACK: "Back",
+    TEXT_SELECT_EVENT: KING + "Which exchange do you want, kupo?",
 }
 # Global's permanent and Dark Visions exchanges, now listed by King Mog when their currency is held.
 OWN = (
@@ -221,21 +223,22 @@ def exchange_items(stores: list) -> list:
                 label = reward_name + suffix
             else:
                 label = reward_name if len(reward_name) <= 34 else reward_name[:31].rstrip() + "..."
-            out.append({"store": store_id, "currency": str(store["currency"]), "medal": medal, "name": label})
+            out.append({"store": store_id, "currency": str(store["currency"]), "medal": medal,
+                        "event": event_name, "name": label})
             seen.add(medal)
     out.sort(key=lambda item: (item["name"].casefold(), item["store"]))
     return out
 
 
-def item_exchange_schedule() -> dict | None:
-    """The native King Mog screen opens one store; its index aliases all eligible medal offers into it."""
-    items = state().get("offers") or []
-    if not items:
-        return None
-    primary = items[0]
-    return {"Z20mNDvL": KING_STORE, "za2xsDj5": str(KING_STORE), "w7VR6ypY": "0",
-            "VjJQ51uG": "2020-01-01 00:00:00", "m8ivD4NX": "2099-12-31 23:59:59",
-            "suR36Jpm": "20:" + str(primary["currency"]), "89YmCAzo": "", "0euar5mZ": ""}
+def item_exchange_schedules() -> list[dict]:
+    """Schedules for each original, stock-bearing event store shown by King Mog."""
+    by_store = {}
+    for offer in state().get("offers") or []:
+        by_store.setdefault(str(offer["store"]), str(offer["currency"]))
+    return [{"Z20mNDvL": store, "za2xsDj5": store, "w7VR6ypY": "0",
+             "VjJQ51uG": "2020-01-01 00:00:00", "m8ivD4NX": "2099-12-31 23:59:59",
+             "suR36Jpm": "20:" + currency, "89YmCAzo": "", "0euar5mZ": ""}
+            for store, currency in sorted(by_store.items())]
 
 
 # --- the script -------------------------------------------------------------------------------------------
@@ -248,22 +251,54 @@ STEP = _cmd(0x01)
 
 
 def script(items: list) -> tuple[list, bytes]:
-    """King Mog's single native Item Exchange button; products are rendered by the game's store scene."""
-    n = len(items)
-    if not n:
+    """Choose an owned event, then open its original native store and scrollable item list."""
+    stores = {}
+    for item in items:
+        store = str(item["store"])
+        stores.setdefault(store, {"store": store, "event": item.get("event") or item["name"]})
+    choices = sorted(stores.values(), key=lambda row: (str(row["event"]).casefold(), row["store"]))
+    if not choices:
         body = _cmd(0x08, struct.pack(">I", TEXT_NONE)) + STEP
         return [len(body)], body
-    choice = (bytes([2]) + struct.pack(">IB", TEXT_ITEM_EXCHANGE, 1)
-              + struct.pack(">IB", LEAVE_TEXT, 2))
-    menu = _cmd(0x15, choice + struct.pack(">I", TEXT_PROMPT)) + STEP
-    open_store = (_cmd(0x44, struct.pack(">I", KING_STORE)) + _cmd(0x02, b"\x00\x01")
-                  + STEP + _cmd(0x04, struct.pack(">H", 0)) + STEP)
-    leave = STEP
-    return [0, len(menu), len(menu) + len(open_store)], menu + open_store + leave
+    pages = [choices[i:i + 3] for i in range(0, len(choices), 3)]
+    event_start = 1
+    store_start = event_start + len(pages)
+    store_label = {row["store"]: store_start + index for index, row in enumerate(choices)}
+    store_page = {row["store"]: event_start + index // 3 for index, row in enumerate(choices)}
+    text_index = {row["store"]: index for index, row in enumerate(choices)}
+    leave_label = store_start + len(choices)
+    blocks = {}
+    root_choice = (bytes([2]) + struct.pack(">IB", TEXT_ITEM_EXCHANGE, event_start)
+                   + struct.pack(">IB", LEAVE_TEXT, leave_label))
+    blocks[0] = _cmd(0x15, root_choice + struct.pack(">I", TEXT_PROMPT)) + STEP
+    for page_index, page in enumerate(pages):
+        options = [(TEXT_ENTRY + text_index[row["store"]], store_label[row["store"]]) for row in page]
+        if page_index + 1 < len(pages):
+            options.append((NEXT_TEXT, event_start + page_index + 1))
+        options.append((TEXT_BACK, 0))
+        data = bytes([len(options)]) + b"".join(struct.pack(">IB", text, label) for text, label in options)
+        blocks[event_start + page_index] = _cmd(0x15, data + struct.pack(">I", TEXT_SELECT_EVENT)) + STEP
+    for row in choices:
+        store = int(row["store"])
+        back = _cmd(0x04, struct.pack(">H", store_page[row["store"]])) + STEP
+        blocks[store_label[row["store"]]] = _cmd(0x44, struct.pack(">I", store)) + _cmd(0x02, b"\x00\x01") + STEP + back
+    body, labels = b"", []
+    for label in range(leave_label):
+        labels.append(len(body))
+        body += blocks[label]
+    labels.append(len(body))
+    return labels, body
 
 
 def texts(items: list) -> dict:
-    return dict(TEXTS)
+    out = dict(TEXTS)
+    stores = {}
+    for item in items:
+        store = str(item["store"])
+        stores.setdefault(store, str(item.get("event") or item["name"]))
+    for index, store in enumerate(sorted(stores, key=lambda value: (stores[value].casefold(), value))):
+        out[TEXT_ENTRY + index] = stores[store]
+    return out
 
 
 # --- map.bin and the text file ----------------------------------------------------------------------------
