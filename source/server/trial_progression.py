@@ -88,6 +88,13 @@ STORY_LIMITS = (
     (date(2023, 7, 13), "Rovina Ruins", "A Place of Intertwined Fates"),
     (date(2024, 8, 22), "Ultimo stage", ""),
 )
+STORY_LIMIT_MISSION_OVERRIDES = {
+    date(2020, 2, 20): "11810601",  # Various Tomorrows: last mission in Vast Skies of Tomorrow
+    date(2021, 10, 28): "13110701",  # Season 3 finale: The Maidens' Return
+    date(2023, 5, 4): "14024203",  # Legend's End: Sacrifice 3
+    date(2023, 7, 13): "14024903",  # Rovina Ruins: A Place of Intertwined Fates 3
+    date(2024, 8, 22): "14032404",  # Chapter 13, final shipped Levonia story mission
+}
 
 CHECKPOINT_MISSION_RESTRICTIONS = {
     date(2016, 8, 25): frozenset(("2110394",)),  # Chamber of Awakening - 5★ Units
@@ -185,6 +192,10 @@ def _resolve_story_limit(zone, mission_name):
 
 def story_limit_for_checkpoint(checkpoint_date):
     """Latest supplied story endpoint on or before a Trial checkpoint date."""
+    override = STORY_LIMIT_MISSION_OVERRIDES.get(checkpoint_date)
+    if override:
+        order, _context = _story_order_and_context()
+        return override if override in order else None
     eligible = [(day, zone, mission) for day, zone, mission in STORY_LIMITS if day <= checkpoint_date]
     if not eligible:
         return None

@@ -32,7 +32,8 @@ class CheckpointLapisTests(unittest.TestCase):
         with patch.object(ffbe_battle.State, 'player', player), \
                 patch.object(ffbe_battle.State, 'state_dirty', False), \
                 patch('ffbe_battle.mission_wave_count', return_value=0), \
-                patch('ffbe_battle.story_beast_for_mission', return_value=None):
+            patch('ffbe_battle.story_beast_for_mission', return_value=None), \
+            patch('checkpoint_catchup.apply_completed'):
             ffbe_battle.grant_cleared_mission(spec, pending)
             self.assertEqual(currencies['lapis_free'], CHECKPOINT_LAPIS_BONUS)
             self.assertEqual(spec[RESULT_TAG][0]['p1K5NecV'], '50:1:50000')

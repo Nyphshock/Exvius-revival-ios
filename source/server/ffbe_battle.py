@@ -1369,6 +1369,8 @@ def grant_cleared_mission(spec, mid: str | None, plaintext: str | None = None):
                 row['p1K5NecV'] = ','.join(filter(None, (str(row.get('p1K5NecV') or ''), bonus_text)))
         print(f"    checkpoint: {','.join(day.isoformat() for day in checkpoints)} cleared -> "
               f"+{bonus} lapis", flush=True)
+    from checkpoint_catchup import apply_completed as apply_checkpoint_catchup
+    apply_checkpoint_catchup(State.player)
     if sw is None:
         if mission_open_switch(mid):
             _note(f"grant_cleared_mission: mission {mid} granted no type-{SWITCH_TYPE_MISSION} switch "

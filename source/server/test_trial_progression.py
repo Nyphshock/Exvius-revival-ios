@@ -7,7 +7,8 @@ from trial_progression import (CHECKPOINTS, active_checkpoint_missions, next_che
                                release_is_available, mission_is_within_story_limit,
                                newly_completed_checkpoints, story_limit_for_checkpoint,
                                story_mission_is_available,
-                               checkpoint_mission_is_available, _resolve_story_limit)
+                               checkpoint_mission_is_available, _resolve_story_limit,
+                               STORY_LIMIT_MISSION_OVERRIDES)
 
 
 class TrialProgressionTests(unittest.TestCase):
@@ -55,6 +56,12 @@ class TrialProgressionTests(unittest.TestCase):
         with patch('trial_progression._resolve_story_limit', return_value='story-end') as resolve:
             self.assertEqual(story_limit_for_checkpoint(date(2018, 5, 17)), 'story-end')
         resolve.assert_called_once_with('Energy Transfer Station', 'Beast Sealed Away')
+
+    def test_unresolved_checkpoint_labels_use_verified_story_mission_endpoints(self):
+        for checkpoint, mission in STORY_LIMIT_MISSION_OVERRIDES.items():
+            with self.subTest(checkpoint=checkpoint):
+                with patch('trial_progression._story_order_and_context', return_value=((mission,), {})):
+                    self.assertEqual(story_limit_for_checkpoint(checkpoint), mission)
 
     def test_story_mission_limit_allows_endpoint_and_blocks_later_mission(self):
         order = ('story-before', 'story-end', 'story-after')
