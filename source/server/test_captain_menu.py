@@ -123,10 +123,23 @@ class CaptainMenuTests(unittest.TestCase):
         self.assertEqual(captain_menu.texts(items)[captain_menu.TEXT_ENTRY], "First")
         self.assertEqual(captain_menu.texts(items)[captain_menu.TEXT_ENTRY + 1], "Second")
 
+    def test_event_prompt_includes_entries_without_affordable_offers(self):
+        items = [
+            {"store": "900107", "currency": "106300300", "name": "Akademeia"},
+            {"store": "900109", "currency": "106300500", "name": "Operation MA Demolition"},
+            {"store": "7000002", "currency": "1106300102", "name": "Trial of the Creator"},
+        ]
+        labels, body = captain_menu.script(items)
+        root = captain_menu._commands(body, labels[0], labels[1])
+        choice = next(command for command in root if command[1] == 0x15)
+        payload = choice[2]
+        self.assertEqual(payload[0], 4)
+        self.assertEqual(captain_menu.texts(items)[captain_menu.TEXT_ENTRY + 2], "Trial of the Creator")
+
     def test_native_item_exchange_schedules_keep_each_store_currency(self):
-        with patch.object(captain_menu, "state", return_value={"offers": [
-            {"store": "900109", "currency": "106300500", "name": "Item A"},
-            {"store": "900108", "currency": "106300400", "name": "Item B"},
+        with patch.object(captain_menu, "state", return_value={"entries": [
+            {"store": "900109", "currency": "106300500", "name": "Event A"},
+            {"store": "900108", "currency": "106300400", "name": "Event B"},
         ]}):
             rows = captain_menu.item_exchange_schedules()
 

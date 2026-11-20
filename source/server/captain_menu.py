@@ -72,7 +72,7 @@ SCENE = "211020100"
 RESOURCE_ID = "290001"             # F_RESOURCE_MAP_MST row of 211020100.cpk
 VERSION_FIELD = "OzT5lSz3"          # base (common_lang) file version in F_RESOURCE_MAP_VERSION_MST_LOCALIZE
 VERSION_BASE = 20000
-MENU_LAYOUT_REVISION = 8
+MENU_LAYOUT_REVISION = 9
 SUBMAP = 67
 KING_NPC = 0x05F5EC54               # King Mog's sprite (sub-map 67, events 2 and 7)
 KING_STORE = 900104                 # King Mog's native store, opened by both event pages
@@ -231,10 +231,10 @@ def exchange_items(stores: list) -> list:
 
 
 def item_exchange_schedules() -> list[dict]:
-    """Schedules for each original, stock-bearing event store shown by King Mog."""
+    """Schedules for each owned, stock-bearing exchange store shown by King Mog."""
     by_store = {}
-    for offer in state().get("offers") or []:
-        by_store.setdefault(str(offer["store"]), str(offer["currency"]))
+    for entry in state().get("entries") or []:
+        by_store.setdefault(str(entry["store"]), str(entry["currency"]))
     return [{"Z20mNDvL": store, "za2xsDj5": store, "w7VR6ypY": "0",
              "VjJQ51uG": "2020-01-01 00:00:00", "m8ivD4NX": "2099-12-31 23:59:59",
              "suR36Jpm": "20:" + currency, "89YmCAzo": "", "0euar5mZ": ""}
@@ -680,7 +680,7 @@ def built_pack(*roots) -> tuple[str, dict] | None:
     path = os.path.join(cache_dir(), f"captain-{st['sig']}-{os.path.basename(src)}")
     with _LOCK:
         if not os.path.isfile(path):
-            info = build_pack(src, st.get("offers") or [], path)
+            info = build_pack(src, st.get("entries") or [], path)
             for old in glob.glob(os.path.join(cache_dir(), "captain-*.cpk")):
                 if old != path:
                     os.remove(old)
