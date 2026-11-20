@@ -251,7 +251,7 @@ STEP = _cmd(0x01)
 
 
 def script(items: list) -> tuple[list, bytes]:
-    """Choose an owned event, then open its original native store and scrollable item list."""
+    """Put the owned exchanges directly in King Mog's prompt; each one opens its native store."""
     stores = {}
     for item in items:
         store = str(item["store"])
@@ -260,28 +260,22 @@ def script(items: list) -> tuple[list, bytes]:
     if not choices:
         body = _cmd(0x08, struct.pack(">I", TEXT_NONE)) + STEP
         return [len(body)], body
-    pages = [choices[i:i + 3] for i in range(0, len(choices), 3)]
-    event_start = 1
-    store_start = event_start + len(pages)
-    store_label = {row["store"]: store_start + index for index, row in enumerate(choices)}
-    store_page = {row["store"]: event_start + index // 3 for index, row in enumerate(choices)}
+
+    store_start = 1
     text_index = {row["store"]: index for index, row in enumerate(choices)}
     leave_label = store_start + len(choices)
     blocks = {}
-    root_choice = (bytes([2]) + struct.pack(">IB", TEXT_ITEM_EXCHANGE, event_start)
-                   + struct.pack(">IB", LEAVE_TEXT, leave_label))
+    options = [(TEXT_ENTRY + text_index[row["store"]], store_start + index)
+               for index, row in enumerate(choices)]
+    options.append((LEAVE_TEXT, leave_label))
+    root_choice = bytes([len(options)]) + b"".join(struct.pack(">IB", text, label)
+                                                   for text, label in options)
     blocks[0] = _cmd(0x15, root_choice + struct.pack(">I", TEXT_PROMPT)) + STEP
-    for page_index, page in enumerate(pages):
-        options = [(TEXT_ENTRY + text_index[row["store"]], store_label[row["store"]]) for row in page]
-        if page_index + 1 < len(pages):
-            options.append((NEXT_TEXT, event_start + page_index + 1))
-        options.append((TEXT_BACK, 0))
-        data = bytes([len(options)]) + b"".join(struct.pack(">IB", text, label) for text, label in options)
-        blocks[event_start + page_index] = _cmd(0x15, data + struct.pack(">I", TEXT_SELECT_EVENT)) + STEP
-    for row in choices:
+    for index, row in enumerate(choices):
         store = int(row["store"])
-        back = _cmd(0x04, struct.pack(">H", store_page[row["store"]])) + STEP
-        blocks[store_label[row["store"]]] = _cmd(0x44, struct.pack(">I", store)) + _cmd(0x02, b"\x00\x01") + STEP + back
+        back = _cmd(0x04, struct.pack(">H", 0)) + STEP
+        blocks[store_start + index] = (_cmd(0x44, struct.pack(">I", store))
+                                       + _cmd(0x02, b"\x00\x01") + STEP + back)
     body, labels = b"", []
     for label in range(leave_label):
         labels.append(len(body))

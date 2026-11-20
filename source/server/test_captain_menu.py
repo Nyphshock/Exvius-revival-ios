@@ -116,10 +116,10 @@ class CaptainMenuTests(unittest.TestCase):
                   for _, command, data in captain_menu._commands(body, labels[index], labels[index + 1])
                   if command == 0x44]
 
-        self.assertEqual(options, [captain_menu.TEXT_ITEM_EXCHANGE, captain_menu.LEAVE_TEXT])
+        self.assertEqual(options, [captain_menu.TEXT_ENTRY, captain_menu.TEXT_ENTRY + 1, captain_menu.LEAVE_TEXT])
         self.assertEqual(stores, [900108, 900109])
-        event_page = captain_menu._commands(body, labels[1], labels[2])
-        self.assertTrue(any(command == 0x15 for _, command, _ in event_page))
+        self.assertFalse(any(command == 0x15 for index in range(1, len(labels) - 1)
+                             for _, command, _ in captain_menu._commands(body, labels[index], labels[index + 1])))
         self.assertEqual(captain_menu.texts(items)[captain_menu.TEXT_ENTRY], "First")
         self.assertEqual(captain_menu.texts(items)[captain_menu.TEXT_ENTRY + 1], "Second")
 
