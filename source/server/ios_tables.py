@@ -446,6 +446,12 @@ def store_item_index(raw: bytes, decoded_rows: list[dict], version: int,
     return bytes(out) + bytes.fromhex("beff0000")
 
 
+def store_item_index_version(source_version: int) -> int:
+    """The index sidecar must match the version the client sees for F_STORE_ITEM_MST, not the source file."""
+    from ffbe_battle import table_version_offset
+    return int(source_version) + table_bump(STORE_ITEMS) + table_version_offset()
+
+
 def store_item_index_reply(*roots) -> tuple[bytes | None, str | None]:
     """The native `.i` sidecar, with this player's available medal rows grouped under King Mog's store."""
     import captain_menu
@@ -457,7 +463,7 @@ def store_item_index_reply(*roots) -> tuple[bytes | None, str | None]:
     src = source_table(*roots, token=STORE_ITEMS[1])
     if not src:
         return None, None
-    version = int(re.search(r"Ver(\d+)_", os.path.basename(src)).group(1))
+    version = store_item_index_version(int(re.search(r"Ver(\d+)_", os.path.basename(src)).group(1)))
     from data_paths import MST_DIR
     decoded_path = os.path.join(MST_DIR, "F_STORE_ITEM_MST.ndjson")
     with open(decoded_path, encoding="utf-8") as source:
@@ -465,7 +471,7 @@ def store_item_index_reply(*roots) -> tuple[bytes | None, str | None]:
     raw = open(src, "rb").read()
     data = store_item_index(raw, rows, version, int(schedule["za2xsDj5"]),
                             {str(row["medal"]) for row in offers})
-    return data, (f"F_STORE_ITEM_MST index, King Mog store {schedule['za2xsDj5']}, "
+    return data, (f"F_STORE_ITEM_MST index Ver{version}, King Mog store {schedule['za2xsDj5']}, "
                   f"{len(offers)} available item(s)")
 
 

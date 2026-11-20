@@ -109,6 +109,13 @@ class MissionTableEsperGateTests(unittest.TestCase):
 
 
 class StoreItemStockFilterTests(unittest.TestCase):
+    def test_store_item_index_version_matches_advertised_master_version(self):
+        with patch("ios_tables.table_bump", return_value=157504), \
+                patch("ffbe_battle.table_version_offset", return_value=200000):
+            version = ios_tables.store_item_index_version(378)
+
+        self.assertEqual(version, 357882)
+
     def test_native_store_index_sidecar_is_served_through_ios_tables(self):
         self.assertTrue(ios_tables.wants(ios_tables.STORE_ITEMS_INDEX))
 
